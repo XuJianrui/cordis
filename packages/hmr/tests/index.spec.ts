@@ -1,12 +1,14 @@
 import { Context, Fiber } from 'cordis'
 import Loader from '@cordisjs/plugin-loader'
 import Logger from '@cordisjs/plugin-logger-console'
+import Timer from '@cordisjs/plugin-timer'
+import Hmr from '@cordisjs/plugin-hmr'
 import { writeFileSync, readFileSync, unlinkSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { expect, describe, it, beforeAll, afterAll, afterEach } from 'vitest'
 import { pathToFileURL } from 'node:url'
 
-const testDir = new URL('.', import.meta.url).pathname
+const testDir = import.meta.dirname
 
 // Helper: read and backup a file, returning restore function
 function backupFile(filename: string) {
@@ -69,6 +71,18 @@ async function createContext(configFile: string): Promise<{ ctx: Context; fiber:
   })
   await waitFor(() => ctx.hmr, 5000)
   await new Promise(r => setTimeout(r, 500))
+  return { ctx, fiber }
+}
+
+// Helper: standalone context (Logger + Timer + Loader) for the watch-only
+// regression cases, which need direct control over the HMR config. Returns
+// the Loader fiber for disposal, matching the createContext pattern.
+async function createStandaloneContext(): Promise<{ ctx: Context; fiber: Fiber<Context> }> {
+  const ctx = new Context()
+  ctx.baseUrl = pathToFileURL(resolve(testDir) + '/').href
+  await ctx.plugin(Logger)
+  await ctx.plugin(Timer)
+  const fiber = await ctx.plugin(Loader)
   return { ctx, fiber }
 }
 
@@ -795,6 +809,59 @@ export function apply(ctx: Context) {
       await waitFor(() => ctx.bail('hmr-test/get-value') === 'stash-test-2')
 
       expect(ctx.bail('hmr-test/get-value')).to.equal('stash-test-2')
+    }, 10000)
+  })
+
+  // ===== Watch-only without loader internals =====
+  // Regression: the constructor used to require `loader.internal`
+  // unconditionally, but watch-only mode (root: []) never touches module
+  // reload, so it must boot even when the native helper binding is missing.
+  describe('watch-only without loader internals', () => {
+    it('should start in watch-only mode without loader internals', async () => {
+      const { ctx, fiber } = await createStandaloneContext()
+      // Simulate a missing native helper binding: fromInternal() returns
+      // undefined in production when the addon cannot resolve.
+      ctx.loader.internal = undefined
+
+      await ctx.plugin(Hmr, { root: [], debounce: 100, ignored: [] })
+
+      expect(ctx.hmr).to.be.ok
+      // Watch-only mode must not create a watcher (guarded by root.length).
+      expect((ctx.hmr as unknown as { watcher?: unknown }).watcher).to.be.undefined
+      fiber?.dispose()
+      await new Promise(r => setTimeout(r, SETTLE_MS))
+    }, 10000)
+
+    it('should start in watch-only mode when loader internals are available', async (t) => {
+      const { ctx, fiber } = await createStandaloneContext()
+      // This case pins the "internal present × watch-only" cell. The repo test
+      // runner runs with --expose-internals, so the premise holds in CI; when
+      // the runner lacks the flag, skip instead of failing (the "internal
+      // missing" cell is already covered by the first case).
+      if (!ctx.loader.internal) {
+        fiber?.dispose()
+        t.skip()
+        return
+      }
+      expect(ctx.loader.internal).to.be.ok
+      await ctx.plugin(Hmr, { root: [], debounce: 100, ignored: [] })
+
+      expect(ctx.hmr).to.be.ok
+      // Watch-only mode must not create a watcher, regardless of internals.
+      expect((ctx.hmr as unknown as { watcher?: unknown }).watcher).to.be.undefined
+      fiber?.dispose()
+      await new Promise(r => setTimeout(r, SETTLE_MS))
+    }, 10000)
+
+    it('should still require loader internals for module reload', async () => {
+      const { ctx, fiber } = await createStandaloneContext()
+      ctx.loader.internal = undefined
+
+      await expect(ctx.plugin(Hmr, { root: ['.'], debounce: 100, ignored: [] }))
+        .rejects.toThrow(/loader internals/)
+
+      fiber?.dispose()
+      await new Promise(r => setTimeout(r, SETTLE_MS))
     }, 10000)
   })
 })
