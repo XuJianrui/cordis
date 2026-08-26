@@ -41,8 +41,7 @@ async function loadDependencies(job: ModuleJob, ignored = new Set<string>()) {
   return dependencies
 }
 
-const LOADER_INTERNALS_ERROR =
-  'HMR module reload requires loader internals: run with --expose-internals (Node process flag) or use watch-only mode (root: [])'
+const LOADER_INTERNALS_ERROR = 'HMR module reload requires loader internals: run with --expose-internals (Node process flag) or use watch-only mode (root: [])'
 
 /**
  * True for Node builtins (`node:` scheme) and anything inside node_modules —
