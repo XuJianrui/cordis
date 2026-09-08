@@ -239,4 +239,23 @@ describe('Fiber', () => {
     expect(Object.hasOwn(consumer, 'state')).to.equal(false)
     expect(Object.hasOwn(consumer, 'inertia')).to.equal(false)
   })
+  it('update on a disposed fiber is observable through .catch()', async () => {
+    const root = new Context()
+    const fiber = root.plugin(() => {})
+    await fiber.await()
+    await fiber.dispose()
+
+    let caught: any = null
+    let syncThrew = false
+    try {
+      // A caller that never awaits still attaches a handler.
+      fiber.update({})?.catch?.((reason: any) => { caught = reason })
+    } catch {
+      syncThrew = true
+    }
+    await sleep()
+    expect(syncThrew).to.equal(false)
+    expect(caught).to.be.an('error')
+    expect(caught.code).to.equal('INACTIVE_EFFECT')
+  })
 })
