@@ -279,4 +279,16 @@ describe('Events', () => {
     expect(callback.mock.calls).to.have.length(2)
     expect(terminal.mock.calls).to.have.length(2)
   })
+
+  it('ctx.parallel() rejects with a readable AggregateError', async () => {
+    const { root } = setup()
+    root.on(event, async () => {
+      throw new Error('async listener blew up')
+    })
+
+    const error = await root.parallel(event).catch(e => e)
+    expect(error).to.be.instanceof(AggregateError)
+    expect(error.message).to.include('async listener blew up')
+    expect(error.errors.map((e: Error) => e.message)).to.have.members(['async listener blew up'])
+  })
 })
