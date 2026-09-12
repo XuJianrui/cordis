@@ -219,34 +219,89 @@ class Scaffold {
     console.log(kleur.dim('  Scaffolding project in ') + project + kleur.dim(' ...'))
     const template = argv.template || this.options.template
 
-    const resp1 = await fetch(`${this.registry}/${template}`)
-    if (!resp1.ok) {
-      const { status, statusText } = resp1
-      console.log(`${kleur.red('error')} request failed with status code ${status} ${statusText}`)
+    const resp1 = await this.fetchOrExit(`${this.registry}/${template}`)
+    const remote = await resp1.json().catch(() => null)
+    if (!remote) {
+      console.log(kleur.red('error') + ` invalid registry response from ${this.registry}`)
       process.exit(1)
     }
-    const remote = await resp1.json()
-    const version = remote['dist-tags'][argv.ref || 'latest']
+    const version = remote['dist-tags']?.[argv.ref || 'latest']
+    // an unknown tag and a version the mirror has not caught up to both land
+    // here, so the message names what is missing rather than guessing which
+    const tarball = remote.versions?.[version]?.dist?.tarball
+    if (!tarball) {
+      console.log(kleur.red('error') + ` no tarball for ${argv.ref || 'latest'}`)
+      process.exit(1)
+    }
 
-    const resp2 = await fetch(remote.versions[version].dist.tarball)
-    await new Promise<void>((resolve, reject) => {
-      const stream = Readable.fromWeb(resp2.body as any).pipe(tar.extract({
-        cwd: rootDir,
-        newer: true,
-        strip: 1,
-      }))
-      stream.on('finish', resolve)
-      stream.on('error', reject)
-    })
+    const resp2 = await this.fetchOrExit(tarball)
+    try {
+      await new Promise<void>((resolve, reject) => {
+        const source = Readable.fromWeb(resp2.body as any)
+        // an aborted body errors on the source, which `pipe` does not forward
+        source.on('error', reject)
+        const stream = source.pipe(tar.extract({
+          cwd: rootDir,
+          newer: true,
+          strip: 1,
+        }))
+        stream.on('finish', resolve)
+        stream.on('error', reject)
+      })
+    } catch (error) {
+      const timedOut = (error as Error | undefined)?.name === 'TimeoutError'
+      console.log(kleur.red('error') + ` ${timedOut ? 'timed out downloading' : 'invalid tarball from'} ${tarball}`)
+      process.exit(1)
+    }
 
     await stageYarnBin({ rootDir, registry: this.registry, agent: which() })
-    await this.writePackageJson()
+    await this.writePackageJson(template)
     console.log(kleur.green('  Done.\n'))
   }
 
-  async writePackageJson() {
+  private async fetchOrExit(url: string) {
+    // A registry without a scheme arrives here as a bare path.
+    if (!URL.canParse(url)) {
+      console.log(kleur.red('error') + ` invalid url ${url}`)
+      process.exit(1)
+    }
+    let resp: Response
+    // A slow registry leaves the CLI silent for the whole wait, which reads as
+    // a hang; a periodic line keeps the wait visible.
+    const started = Date.now()
+    const ticker = setInterval(() => {
+      console.log(kleur.dim(`  Still waiting for ${url} (${Math.round((Date.now() - started) / 1000)}s)...`))
+    }, 10000)
+    try {
+      // A registry that accepts the request and never answers leaves the CLI
+      // waiting forever, so the fetch carries a deadline
+      resp = await fetch(url, { signal: AbortSignal.timeout(this.options.timeout ?? 60000) })
+    } catch (error) {
+      // A timeout and an unreachable host are different causes
+      const timedOut = (error as Error | undefined)?.name === 'TimeoutError'
+      console.log(kleur.red('error') + ` ${timedOut ? 'timed out waiting for' : 'unable to reach'} ${url}`)
+      process.exit(1)
+    } finally {
+      clearInterval(ticker)
+    }
+    // Name the url: the registry and the tarball host share this message.
+    if (!resp.ok) {
+      const { status, statusText } = resp
+      console.log(`${kleur.red('error')} request failed with status code ${status} ${statusText} from ${url}`)
+      process.exit(1)
+    }
+    return resp
+  }
+
+  async writePackageJson(template: string) {
     const filename = join(rootDir, 'package.json')
-    const meta = JSON.parse(await readFile(filename, 'utf8'))
+    let meta: any
+    try {
+      meta = JSON.parse(await readFile(filename, 'utf8'))
+    } catch {
+      console.log(kleur.red('error') + ` invalid package.json from ${template}`)
+      process.exit(1)
+    }
     meta.name = project
     if (argv.prod) {
       // https://github.com/koishijs/koishi/issues/994
