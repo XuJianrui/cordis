@@ -362,7 +362,7 @@ class Hmr extends Service {
     for (const filename of invalidatedModules) {
       // Backup and clear ESM loadCache
       const job = Map.prototype.get.call(internal.loadCache, filename)
-      esmBackup[filename] = job
+      if (job) esmBackup[filename] = job
       Map.prototype.delete.call(internal.loadCache, filename)
 
       // Backup and clear CJS Module._cache
