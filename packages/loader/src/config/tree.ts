@@ -129,8 +129,18 @@ export abstract class EntryTree {
   }
 
   import(name: string, getOuterStack?: () => string[]) {
+    // a config file can omit `name`; without it there is no specifier to import
+    if (!name) {
+      return composeError(() => {
+        throw new Error('entry name is required')
+      }, getOuterStack)
+    }
     if (name.startsWith('cordis:')) {
-      return this.ctx.loader.builtins[name.slice(7)]
+      return composeError(() => {
+        const plugin = this.ctx.loader.builtins[name.slice(7)]
+        if (!plugin) throw this.unresolvable(name)
+        return plugin
+      }, getOuterStack)
     }
     return composeError(async (info) => {
       // ModuleJob.run
@@ -139,18 +149,43 @@ export abstract class EntryTree {
       info.offset += 3
       if (this.ctx.loader.internal) {
         return await this.ctx.loader.internal.import(name, this.ctx.baseUrl!, {})
-      } else if (name.startsWith('.')) {
-        return await import(/* @vite-ignore */ new URL(name, this.ctx.baseUrl).href)
+      }
+      let url = name
+      if (name.startsWith('.')) {
+        // a relative specifier cannot be anchored without a base url, and
+        // `new URL` throws a bare TypeError for it
+        if (!this.ctx.baseUrl) throw this.unresolvable(name)
+        url = new URL(name, this.ctx.baseUrl).href
       } else {
         // An `import()` written here anchors on this file, reaching the loader's
         // own dependencies. A helper inside the config file's project supplies
         // that project as the anchor; the plain import applies when no project
         // can be located.
         const resolve = await createResolve(this.ctx.baseUrl)
-        const url = resolve ? resolve(name) : name
+        if (resolve) {
+          try {
+            url = resolve(name)
+          } catch {
+            // `import.meta.resolve` only resolves; any failure is a resolve failure
+            throw this.unresolvable(name)
+          }
+        }
+      }
+      try {
         return await import(/* @vite-ignore */ url)
+      } catch (error) {
+        // a specifier that cannot be found is re-anchored; one that resolves
+        // but fails to load keeps Node's own error, which says why
+        if ((error as NodeJS.ErrnoException | undefined)?.code !== 'ERR_MODULE_NOT_FOUND') throw error
+        throw this.unresolvable(name)
       }
     }, getOuterStack)
+  }
+
+  /** `baseUrl` is optional, so the location is only named when it is known. */
+  private unresolvable(name: string) {
+    const from = this.ctx.baseUrl ? ` from ${this.ctx.baseUrl}` : ''
+    return new Error(`cannot resolve ${name}${from}`)
   }
 
   abstract commit(change: EntryChange): void
