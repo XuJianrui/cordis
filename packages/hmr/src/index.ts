@@ -23,6 +23,17 @@ declare module 'cordis' {
   }
 }
 
+// a path can present with either drive-letter case on Windows, and the watcher
+// map keys on strict equality
+function normalizePath(path: string | URL, baseDir: string) {
+  const filename = path instanceof URL || (typeof path === 'string' && path.startsWith('file:'))
+    ? fileURLToPath(path)
+    : resolve(baseDir, path)
+  return process.platform === 'win32'
+    ? filename.replace(/^[a-zA-Z]:/, m => m.toUpperCase())
+    : filename
+}
+
 export type WatchCallback = () => Awaitable<void>
 
 /**
@@ -154,14 +165,14 @@ class Hmr extends Service {
     this.watcher = watch(root, {
       ...this.config,
       cwd: this.baseDir,
-      ignored: path => !this.watchers.has(resolve(this.baseDir, path)) && match(relative(this.baseDir, path)),
+      ignored: path => !this.watchers.has(normalizePath(path, this.baseDir)) && match(relative(this.baseDir, path)),
     })
 
     const partialReload = this.ctx.debounce(() => this.partialReload(), this.config.debounce)
 
     this.watcher.on('change', async (path) => {
       this.ctx.logger.debug('change detected at %C', path)
-      const filename = resolve(this.baseDir, path)
+      const filename = normalizePath(path, this.baseDir)
       const url = pathToFileURL(filename).href
 
       // Full reload: the changed file is part of the framework
@@ -200,9 +211,7 @@ class Hmr extends Service {
    * a path runs on each change.
    */
   watch(path: string | URL, callback: WatchCallback) {
-    const filename = path instanceof URL || path.startsWith('file:')
-      ? fileURLToPath(path)
-      : resolve(this.baseDir, path)
+    const filename = normalizePath(path, this.baseDir)
     return this.ctx.effect(() => {
       let callbacks = this.watchers.get(filename)
       if (!callbacks) this.watchers.set(filename, callbacks = new Set())

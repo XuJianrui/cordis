@@ -1221,6 +1221,18 @@ export function apply(ctx: Context) {
       await waitFor(() => seen.length >= 2)
       expect([...seen].sort()).to.deep.equal(['a', 'b'])
     }, 15000)
+
+    it('matches paths across drive-letter cases on Windows', async () => {
+      let calls = 0
+      const altPath = process.platform === 'win32'
+        ? dotPath.replace(/^[a-z]:/i, m => (m === m.toUpperCase() ? m.toLowerCase() : m.toUpperCase()))
+        : dotPath
+      disposables.push(ctx.hmr.watch(altPath, () => { calls++ }))
+      await new Promise(r => setTimeout(r, SETTLE_MS))
+
+      writeFileSync(dotPath, 'v3')
+      await waitFor(() => calls > 0)
+    }, 15000)
   })
 
   // ===== Without loader internals =====
