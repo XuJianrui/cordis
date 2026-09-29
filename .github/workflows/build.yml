@@ -4,6 +4,13 @@ on:
   push:
   pull_request:
 
+concurrency:
+  # Only a push to `main` may publish (see the `Publish` guard below), so that run
+  # is the one left alone. Everything else — a pull request, or a push to any other
+  # ref — keeps only its newest run, cancelling one that is already running.
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ !(github.event_name == 'push' && github.ref == 'refs/heads/main') }}
+
 jobs:
   lint:
     runs-on: ubuntu-latest
