@@ -4,6 +4,12 @@ on:
   push:
   pull_request:
 
+concurrency:
+  # A pull request keeps only its newest run. A push is keyed by ref and never
+  # cancels a run in progress, so an in-flight `Publish` on main still completes.
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   lint:
     runs-on: ubuntu-latest
