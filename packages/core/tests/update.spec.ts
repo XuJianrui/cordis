@@ -281,3 +281,110 @@ describe('Fiber: concurrent updates', () => {
     await root.fiber.dispose()
   })
 })
+
+// ---- D/E-probe: where a post-dispose write lands ----
+import { expect, it } from 'vitest'
+
+// Questioning my own claim. I wrote "the model says the work runs to
+// completion, but core's provide() does not go through assertActive, so the
+// model and the implementation disagree". That is an inference from reading
+// two things. Measure it instead.
+//
+// If the resumed handler's write is genuinely lost, then:
+//
+//   D1  where did it go? the fiber's own store, or the root registry?
+//   D2  is it observable by anyone? (a service another fiber reads)
+//   D3  does the fiber's own ctx still resolve it?
+//   D4  does the fiber re-appear in the registry (i.e. resurrect)?
+//
+// And the sharper question: is the *effect* cleanup ordered before the resume?
+// If yes, the handler runs against a context whose effects are already gone --
+// which is the strongest form of "resumes against a disposed context".
+
+it('probe D: where does a post-dispose write actually land', async () => {
+  const root = new Context()
+  const started = Promise.withResolvers<void>()
+  const release = Promise.withResolvers<void>()
+  const order: string[] = []
+  let storeHas = false
+  let rootHas = false
+  let ownCtxHas: unknown = 'unset'
+  let uidDuringResume: unknown = 'unset'
+
+  const fiber = await root.plugin((ctx: any) => {
+    ctx.effect(() => {
+      order.push('effect:installed')
+      return () => order.push('effect:cleaned')
+    })
+    ctx.on('internal/update', async () => {
+      started.resolve()
+      await release.promise
+      order.push('handler:resumed')
+      uidDuringResume = fiber.uid
+      ctx.provide('svc', 'from-resumed')
+      // D1: did it land in this fiber's own store?
+      storeHas = Object.prototype.hasOwnProperty.call(
+        (fiber as any)._store ?? {}, 'svc')
+      // D2: observable at the root?
+      rootHas = root.registry.has('svc')
+      // D3: through the fiber's own ctx?
+      try {
+        ownCtxHas = ctx.svc
+      } catch (error) {
+        ownCtxHas = `threw:${(error as Error).message}`
+      }
+    })
+  }, { value: 1 })
+
+  const updating = fiber.update({ value: 2 })
+  await started.promise
+  const disposing = fiber.dispose()
+  release.resolve()
+  await Promise.all([updating, disposing]).catch(() => {})
+  await new Promise(r => setTimeout(r, 30))
+
+  console.log('D0 ORDER', JSON.stringify(order))
+  console.log('D1 STORE_HAS', storeHas)
+  console.log('D2 ROOT_HAS', rootHas)
+  console.log('D3 OWN_CTX', JSON.stringify(ownCtxHas))
+  console.log('D4 UID_DURING_RESUME', uidDuringResume)
+  console.log('D5 ROOT_HAS_AFTER_SETTLE', root.registry.has('svc'))
+  console.log('D6 FIBER_STATE', fiber.state)
+  expect(true).to.equal(true)
+})
+
+// The comparison case: the SAME provide from a handler whose fiber is still
+// alive. If this one lands, the difference is liveness, not the update path.
+it('probe E: the same write while the fiber is alive', async () => {
+  const root = new Context()
+  const started = Promise.withResolvers<void>()
+  const release = Promise.withResolvers<void>()
+  let rootHasDuring = false
+  let ownCtxHas: unknown = 'unset'
+  let uidDuring: unknown = 'unset'
+
+  const fiber = await root.plugin((ctx: any) => {
+    ctx.on('internal/update', async () => {
+      started.resolve()
+      await release.promise
+      uidDuring = fiber.uid
+      ctx.provide('svc2', 'from-alive')
+      rootHasDuring = root.registry.has('svc2')
+      ownCtxHas = ctx.svc2
+    })
+  }, { value: 1 })
+
+  const updating = fiber.update({ value: 2 })
+  await started.promise
+  release.resolve()
+  await updating
+  await fiber.await()
+  await new Promise(r => setTimeout(r, 30))
+
+  console.log('E0 UID_DURING', uidDuring)
+  console.log('E1 ROOT_HAS_DURING', rootHasDuring)
+  console.log('E2 OWN_CTX', JSON.stringify(ownCtxHas))
+  console.log('E3 ROOT_HAS_AFTER', root.registry.has('svc2'))
+  console.log('E4 STATE', fiber.state)
+  expect(true).to.equal(true)
+})
