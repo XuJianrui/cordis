@@ -93,7 +93,6 @@ export class Entry {
   }
 
   async refresh() {
-    if (this.fiber) return
     if (this.disabled) return
     await this.init()
   }
