@@ -124,9 +124,6 @@ export class Logger {
     const report = (error: any) => {
       if (typeof process !== 'undefined' && typeof process.emitWarning === 'function') {
         process.emitWarning(error)
-      } else {
-        // eslint-disable-next-line no-console
-        console.error(error)
       }
     }
     return (...args: any[]) => {
@@ -146,12 +143,7 @@ export class Logger {
           const targetLevel = exporter.levels?.[this.name] ?? exporter.levels?.default ?? this.level ?? LoggerLevel.INFO
           if (targetLevel < level) continue
           const message: Message = { sn, ts, type, level, name: this.name, ...this.meta, args }
-          // An exporter is user code: one failing sink must not decide the
-          // control flow of whatever logged, nor starve the sinks after it.
-          const result = exporter.export(message) as any
-          if (typeof result?.then === 'function') {
-            result.then(undefined, report)
-          }
+          exporter.export(message)
         } catch (error) {
           report(error)
         }
