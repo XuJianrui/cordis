@@ -477,3 +477,125 @@ describe('Fiber: concurrent updates', () => {
     expect(consumer.state).to.equal(FiberState.DISPOSED)
   })
 })
+
+// ---- B/C-probe: disposal guarantees vs the model ----
+import { expect, it } from 'vitest'
+
+// Where the paper and #194 disagree about disposal, measured rather than argued.
+//
+// Paper §4.4 Asynchrony (L2518-2521, L2526-2527):
+//   "In an asynchronous host the iterations and the inverses yield futures, so a
+//    map in flight runs to completion WHETHER OR NOT IT IS STILL WANTED"
+//   "An inverse in flight calls for no counterpart of inertia: THE RULES NEVER
+//    DECLINE A DEACTIVATION, UNLOADING being left by L-Unload alone with no
+//    premise on the target view"
+//
+// So the model settles two questions #194 leaves open:
+//   Q1  may an inertial host refuse to run work that is no longer wanted?
+//       -> no: "never decline"
+//   Q2  what happens to work that is in flight when a deactivation begins?
+//       -> it completes: "runs to completion whether or not it is still wanted"
+//
+// #194 issue line 58 asks that older update work "not leave resources running
+// after disposal". If the handler's own writes are not a resource the fiber
+// owns, Q2 says letting it finish is CORRECT and cancelling it would be the
+// deviation. This probe measures whether that reading is self-consistent:
+//
+//   B1  does the fiber's own effect cleanup still run while the handler is
+//       held? (if yes, the fiber's resources do NOT survive disposal)
+//   B2  does the handler, resuming afterwards, touch anything the fiber owns?
+//   B3  is a write by the resumed handler observable in the registry?
+//   B4  does the handler observe itself as running against a dead fiber?
+
+it('probe B: what disposal guarantees, measured', async () => {
+  const root = new Context()
+  const started = Promise.withResolvers<void>()
+  const release = Promise.withResolvers<void>()
+  const log: string[] = []
+  let effectCleanups = 0
+  let handlerRuns = 0
+  let resumedAfterCleanup = -1
+
+  const fiber = await root.plugin((ctx: any, config: { value: number }) => {
+    ctx.effect(() => {
+      log.push('effect:installed')
+      return () => {
+        effectCleanups++
+        log.push('effect:cleaned')
+      }
+    })
+    ctx.on('internal/update', async () => {
+      handlerRuns++
+      started.resolve()
+      await release.promise
+      // where in the disposal order does this resume?
+      resumedAfterCleanup = effectCleanups
+      // can the resumed handler still register fiber-scoped work?
+      try {
+        ctx.on('some/event', () => {})
+        log.push('handler:on-after-dispose:ok')
+      } catch (error) {
+        log.push(`handler:on-after-dispose:${(error as Error).message}`)
+      }
+      ctx.provide('from-resumed-handler', true)
+      log.push('handler:provided')
+    })
+  }, { value: 1 })
+
+  const updating = fiber.update({ value: 2 })
+  await started.promise
+  const disposing = fiber.dispose()
+  release.resolve()
+  await Promise.all([updating, disposing]).catch(() => {})
+  await new Promise(r => setTimeout(r, 30))
+
+  console.log('B1 EFFECT_CLEANUPS', effectCleanups)
+  console.log('B2 RESUMED_AFTER_CLEANUP', resumedAfterCleanup)
+  console.log('B3 PROVIDER_VISIBLE', root.registry.has('from-resumed-handler'))
+  console.log('B3b HANDLER_RUNS', handlerRuns)
+  console.log('B4 LOG', JSON.stringify(log))
+  console.log('B4b STATE', fiber.state)
+  console.log('B4c UID', fiber.uid)
+  expect(true).to.equal(true)
+})
+
+// Does a handler that DOES own resources behave differently? This is the case
+// where cancelling work would leak, so it decides whether "cancel on dispose"
+// is even safe as a rule.
+it('probe C: a handler holding a resource across disposal', async () => {
+  const root = new Context()
+  const started = Promise.withResolvers<void>()
+  const release = Promise.withResolvers<void>()
+  let released = 0
+  let sawState: number[] = []
+
+  const fiber = await root.plugin((ctx: any, config: { value: number }) => {
+    ctx.on('internal/update', async () => {
+      started.resolve()
+      await release.promise
+      // the handler itself owns something that must be given back
+      try {
+        ctx.set('resource', 'held-by-handler')
+        sawState.push(fiber.state)
+        // and tries to clean it up itself
+        ctx.set('resource', undefined)
+        released++
+      } catch (error) {
+        sawState.push(-(error as any)?.code ?? -999)
+      }
+    })
+  }, { value: 1 })
+
+  const updating = fiber.update({ value: 2 })
+  await started.promise
+  const disposing = fiber.dispose()
+  release.resolve()
+  await Promise.all([updating, disposing]).catch(() => {})
+  await new Promise(r => setTimeout(r, 30))
+
+  console.log('C1 RELEASED_BY_HANDLER', released)
+  console.log('C2 STATE_WHEN_RESUMED', JSON.stringify(sawState))
+  console.log('C3 RESOURCE_LEFT', root.registry.has('resource'))
+  console.log('C4 FINAL_STATE', fiber.state)
+  expect(true).to.equal(true)
+})
