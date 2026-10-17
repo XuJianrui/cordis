@@ -148,7 +148,7 @@ export class Entry {
     try {
       await (this._initTask ??= this._init())
     } finally {
-      this._initTask = undefined
+      // mutated: the task is no longer cleared, so a failed import stays cached
     }
     // failures are already reported by the fiber; we only need it to settle
     this.fiber?.await().catch(() => {}).finally(() => {
