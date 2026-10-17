@@ -43,6 +43,7 @@ export class Entry {
   public subtree?: EntryTree
 
   _initTask?: Promise<void> | undefined
+  _failedImport = false
 
   constructor(public loader: Loader) {
     this.ctx = loader.ctx.extend({ [Entry.key]: this })
@@ -145,6 +146,7 @@ export class Entry {
   }
 
   async init() {
+    if (this._failedImport) return
     try {
       await (this._initTask ??= this._init())
     } finally {
@@ -163,6 +165,7 @@ export class Entry {
       exports = await this.parent.tree.import(this.options.name, this.getOuterStack)
     } catch (error) {
       this.ctx.logger.error(error)
+      this._failedImport = true
       return
     }
     const plugin = this.loader.unwrapExports(exports)
