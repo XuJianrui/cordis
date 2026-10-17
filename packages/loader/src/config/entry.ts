@@ -146,7 +146,7 @@ export class Entry {
 
   async init() {
     try {
-      await (this._initTask ??= this._init())
+      await this._init()
     } finally {
       this._initTask = undefined
     }
