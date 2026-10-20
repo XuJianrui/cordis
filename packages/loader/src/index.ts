@@ -1,4 +1,4 @@
-import { Context, Fiber, FiberState, Inject, Service, ValidationError } from 'cordis'
+import { Context, Fiber, FiberState, Service, ValidationError } from 'cordis'
 import { Awaitable, defineProperty, Dict, isNullable } from 'cosmokit'
 import { ModuleLoader } from './internal.ts'
 import { Entry, EntryOptions } from './config/entry.ts'
@@ -124,8 +124,8 @@ export class Loader extends EntryTree {
       // 1. set `fiber.entry`
       if (fiber.parent[Entry.key] && !fiber.entry) {
         fiber.entry = fiber.parent[Entry.key]
-        // FIXME merge config
-        Inject.resolve(fiber.entry!.options.inject, fiber.inject)
+        // `entry.inject` holds the values already evaluated in the parent scope
+        Object.assign(fiber.inject, fiber.entry!.inject)
       }
 
       // 2. handle self-dispose
@@ -159,12 +159,20 @@ export class Loader extends EntryTree {
       // unregisters it before disposing the fiber)
       if (entry.parent.tree.store[entry.options.id] !== entry) return
 
-      // case 8: fiber is disposed by loader behavior
+      // case 8: the loader is taking the fiber down itself (rebuild, disable,
+      // removal, a dependency going away). Only a fiber that disposed itself
+      // writes the option back.
+      if (entry._disposing) return
+
+      // case 9: fiber is disposed by loader behavior
       // such as inject checker, config file update, ancestor group disable
       if (entry.disabled) return
 
       const legacy = { ...entry.options }
       entry.options.disabled = true
+      // the write-back is a verdict too: the cached one would otherwise keep
+      // reporting the entry as enabled after it disabled itself
+      entry._verdict = true
       entry.parent.tree.commit({ id: entry.options.id, group: entry.parent, options: entry.options, legacy })
     })
 
