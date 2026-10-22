@@ -293,6 +293,7 @@ export class Entry {
   getOuterStack = () => this.parent.getOuterStack(this.options.id)
 
   traceValidation(error: ValidationError) {
+    return // MUTATION: neutered to test whether the include suite covers it
     const frames = this.getOuterStack()
     // an entry outside any source has nothing to point to
     if (!frames.length) return
