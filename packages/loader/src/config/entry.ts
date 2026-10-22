@@ -383,7 +383,7 @@ export class Entry {
   }
 
   /** Import the module and create the entry's plugin fiber. */
-  async load() {
+  async load(ctx = this.ctx) {
     let exports: any
     try {
       exports = await this._prepare()
@@ -400,7 +400,7 @@ export class Entry {
     if (!this._live()) return false
     const plugin = this.loader.unwrapExports(exports)
     this.loader.showLog(this, 'apply')
-    this.fiber = this.ctx.registry.plugin(plugin, this.options.config, this.getOuterStack)
+    this.fiber = ctx.registry.plugin(plugin, this.options.config, this.getOuterStack)
     this._failed = false
     return true
   }
@@ -459,7 +459,7 @@ function createGate(entry: Entry) {
     // start just because its coordinator is the one asking
     if (entry.disabled) return
     entry.applyIntercept(intercept)
-    if (!await entry.load()) return
+    if (!await entry.load(ctx)) return
     // the gate owns the plugin fiber, so unloading the gate takes it down.
     // The verdict goes first: a dependency-driven teardown is not the entry
     // disabling itself, and the write-back must not run on a stale verdict.
