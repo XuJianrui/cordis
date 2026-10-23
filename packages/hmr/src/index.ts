@@ -4,6 +4,7 @@ import { ModuleJob, ModuleLoader, unwrapExports } from '@cordisjs/plugin-loader'
 import { AsyncLocalStorage } from 'node:async_hooks'
 import { relative, resolve } from 'node:path'
 import { handleError } from './error.ts'
+import { collectDependencies, isBuiltin } from './graph.ts'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { createRequire } from 'node:module'
 
@@ -15,27 +16,6 @@ declare module 'cordis' {
   interface Events {
     'hmr/reload'(result: Hmr.Result): void
   }
-}
-
-function isExcluded(url: string) {
-  return url.startsWith('node:') || url.includes('/node_modules/')
-}
-
-/**
- * Recursively collect all module dependencies from a ModuleJob.
- * Skips node: builtins and node_modules to focus on user code.
- */
-async function loadDependencies(job: ModuleJob, ignored = new Set<string>()) {
-  const dependencies = new Set<string>()
-  async function traverse(job: ModuleJob) {
-    if (ignored.has(job.url) || dependencies.has(job.url)) return
-    if (isExcluded(job.url)) return
-    dependencies.add(job.url)
-    const children = await job.linked
-    await Promise.all(Array.prototype.map.call(children, traverse))
-  }
-  await traverse(job)
-  return dependencies
 }
 
 /** A registered plugin whose module has changed. */
@@ -122,7 +102,7 @@ class Hmr extends Service {
       const mainUrl = pathToFileURL(resolve(process.argv[1])).href
       const mainJob = this.internal?.loadCache.get(mainUrl)
       if (mainJob) {
-        this.hosts = await loadDependencies(mainJob)
+        this.hosts = await collectDependencies(mainJob)
       }
     }
   }
@@ -185,7 +165,7 @@ class Hmr extends Service {
     await Promise.all([...changed].map(async (url) => {
       const children = await this.getLinked(url)
       for (const child of children) {
-        if (accepted.has(child) || declined.has(child) || isExcluded(child)) continue
+        if (accepted.has(child) || declined.has(child) || isBuiltin(child)) continue
         pending.push(child)
       }
     }))
@@ -197,7 +177,7 @@ class Hmr extends Service {
         const children = await this.getLinked(url)
         let isDeclined = true, isAccepted = false
         for (const child of children) {
-          if (declined.has(child) || isExcluded(child)) continue
+          if (declined.has(child) || isBuiltin(child)) continue
           if (accepted.has(child)) {
             isAccepted = true
             break
@@ -240,7 +220,7 @@ class Hmr extends Service {
     const internal = this.internal!
     const candidates = new Map<ModuleJob, Plugin>()
     for (const url of Map.prototype.keys.call(internal.loadCache) as Iterable<string>) {
-      if (declined.has(url) || isExcluded(url)) continue
+      if (declined.has(url) || isBuiltin(url)) continue
       const job = internal.loadCache.get(url)
       if (!job?.module) continue
       let plugin: Plugin | undefined
@@ -318,7 +298,7 @@ class Hmr extends Service {
       for (const job of unit.keys()) declined.delete(job.url)
       const closures = new Map<ModuleJob, Set<string>>()
       for (const job of unit.keys()) {
-        closures.set(job, await loadDependencies(job, declined))
+        closures.set(job, await collectDependencies(job, declined))
       }
       for (const job of unit.keys()) declined.add(job.url)
 
