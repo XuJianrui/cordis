@@ -109,14 +109,18 @@ export class IdentityStore {
     const retargeted = new Set<string>()
     for (const rec of this.records.values()) {
       if (under(rec.path, rootPath)) candidates.add(rec.url)
-      else if (retarget && packageName(rec.path) === retarget) retargeted.add(rec.url)
+      else if (retarget && belongsTo(rec.path, retarget)) retargeted.add(rec.url)
     }
     for (const url of loaded) {
-      const path = toPath(url)
+      // The old real path may already be gone: the package manager can delete
+      // the versioned directory before `reconcile` runs. `toPath` needs the
+      // file to exist, but the URL still contains the old path, and that path
+      // carries the package name under `node_modules`.
+      const path = toPath(url) ?? rawPath(url)
       // loaded after the last observation: no record to compare against yet
       if (!path || this.records.has(path)) continue
       if (under(path, rootPath)) candidates.add(url)
-      else if (retarget && packageName(path) === retarget) retargeted.add(url)
+      else if (retarget && belongsTo(path, retarget)) retargeted.add(url)
     }
     return [...new Set([
       ...[...candidates].filter(url => this.changed(url)),
@@ -140,6 +144,27 @@ function toPath(url: string) {
   } catch {
     return undefined
   }
+}
+
+function rawPath(url: string) {
+  try {
+    return fileURLToPath(url)
+  } catch {
+    return undefined
+  }
+}
+
+// Whether `path` belongs to the retargeted package `name`. The manifest wins
+// when it is still on disk; after the old versioned directory is deleted, the
+// path itself still names the package under `node_modules`.
+function belongsTo(path: string, name: string) {
+  if (packageName(path) === name) return true
+  const marker = `${sep}node_modules${sep}`
+  const index = path.lastIndexOf(marker)
+  if (index < 0) return false
+  const rest = path.slice(index + marker.length)
+  const expected = name.split('/').join(sep)
+  return rest === expected || rest.startsWith(expected + sep)
 }
 
 function stat(path: string) {
