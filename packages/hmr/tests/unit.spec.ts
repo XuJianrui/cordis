@@ -224,6 +224,7 @@ export async function apply(ctx: any) {
   // no scope covers — do not stay behind.
   it('puts the caches back when a unit aborts', async () => {
     await setup()
+    expect(ctx.hmr.reloads).to.equal(0)
     fixture('rollback-dep.ts', `export const value = 'r1'\n`)
     await load('rollback.ts', `
 import { value } from './rollback-dep.ts'
@@ -234,11 +235,19 @@ export async function apply(ctx: any) {
   ctx.on('unit/rollback' as any, () => value)
 }
 `)
+    // a completed transaction counts exactly once
+    fixture('rollback-dep.ts', `export const value = 'r2'\n`)
+    const applied = await ctx.hmr.reconcile({ files: [resolve(fixtureDir, 'rollback-dep.ts')] })
+    expect(applied.replaced).to.have.length(1)
+    expect(ctx.hmr.reloads).to.equal(1)
+
     // the new version pulls in a module the old one never had, then breaks
     fixture('new-only.ts', `export const x = 1\n`)
     fixture('rollback-dep.ts', `import { x } from './new-only.ts'\nthrow new Error('broken')\n`)
     const result = await ctx.hmr.reconcile({ files: [resolve(fixtureDir, 'rollback-dep.ts')] })
     expect(result.aborted).to.have.length(1)
+    // an aborted transaction is finished too, and still counts exactly once
+    expect(ctx.hmr.reloads).to.equal(2)
 
     const cache = ctx.loader.internal!.loadCache
     const held = (name: string) => Map.prototype.has.call(cache, pathToFileURL(resolve(fixtureDir, name)).href)

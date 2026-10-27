@@ -27,7 +27,10 @@ export interface Identity {
 // whether a file can be proven unchanged, and what cannot be proven counts
 // as changed.
 export class IdentityStore {
-  // realpath -> Identity
+  // realpath -> Identity. Records are kept for the process lifetime: HMR has
+  // no event that proves a module left every closure, so `forget` is explicit.
+  // A long-running process can read `hmr.reloads` to decide when a restart is
+  // cheaper than the retained records.
   private records = new Map<string, Identity>()
 
   // `window`: how long after a write an observation of it stays suspicious,

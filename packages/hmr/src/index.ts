@@ -95,6 +95,10 @@ class Hmr extends Service {
   // files an operation changed
   public identity = new IdentityStore()
 
+  // finished reload transactions; a long-running process can read this to
+  // decide when a restart is cheaper than the records retained below
+  public reloads = 0
+
   // changed modules of failed units, evicted at the start of the next transaction
   private dirty = new Set<string>()
   private dirtyOwner = {}
@@ -717,6 +721,10 @@ class Hmr extends Service {
     } finally {
       recordIdentity()
       cache.clear()
+      // Count the transaction at the end of its queue slot: it entered the
+      // try, so it reloaded even if a unit aborted. A call that returned
+      // before the try had nothing to reload.
+      this.reloads++
     }
   }
 }
