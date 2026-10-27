@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto'
-import { readFileSync, realpathSync, statSync } from 'node:fs'
-import { sep } from 'node:path'
+import { lstatSync, readFileSync, realpathSync, statSync } from 'node:fs'
+import { dirname, join, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 export interface Identity {
@@ -96,18 +96,32 @@ export class IdentityStore {
   expand(root: string, loaded: Iterable<string>): string[] {
     const rootPath = toPath(root)
     if (!rootPath) return []
+    let raw: string | undefined
+    try {
+      raw = fileURLToPath(root)
+    } catch {}
+    // An isolated-layout install retargets a package symlink; the loaded
+    // modules still live at the old real path. Match them by package name and
+    // include all of them, since their files are unchanged but the package
+    // they belong to is not.
+    const retarget = raw && isLink(raw) ? packageName(rootPath) : undefined
     const candidates = new Set<string>()
+    const retargeted = new Set<string>()
     for (const rec of this.records.values()) {
       if (under(rec.path, rootPath)) candidates.add(rec.url)
+      else if (retarget && packageName(rec.path) === retarget) retargeted.add(rec.url)
     }
     for (const url of loaded) {
       const path = toPath(url)
       // loaded after the last observation: no record to compare against yet
-      if (path && !this.records.has(path) && under(path, rootPath)) {
-        candidates.add(url)
-      }
+      if (!path || this.records.has(path)) continue
+      if (under(path, rootPath)) candidates.add(url)
+      else if (retarget && packageName(path) === retarget) retargeted.add(url)
     }
-    return [...candidates].filter(url => this.changed(url))
+    return [...new Set([
+      ...[...candidates].filter(url => this.changed(url)),
+      ...retargeted,
+    ])]
   }
 
   // Drop the record for `path`, e.g. once its module left the graph.
@@ -142,4 +156,45 @@ function hashPath(path: string) {
 
 function under(path: string, root: string) {
   return path === root || path.startsWith(root + sep)
+}
+
+// Package names are cached by directory; `null` means no manifest was found.
+const names = new Map<string, string | null>()
+
+function packageName(path: string): string | undefined {
+  let dir = path
+  try {
+    if (!statSync(dir).isDirectory()) dir = dirname(dir)
+  } catch {
+    return undefined
+  }
+  const chain: string[] = []
+  while (true) {
+    const cached = names.get(dir)
+    if (cached !== undefined) {
+      for (const item of chain) names.set(item, cached)
+      return cached ?? undefined
+    }
+    chain.push(dir)
+    try {
+      const manifest = JSON.parse(readFileSync(join(dir, 'package.json'), 'utf8'))
+      const name = typeof manifest.name === 'string' ? manifest.name : null
+      for (const item of chain) names.set(item, name)
+      return name ?? undefined
+    } catch {}
+    const parent = dirname(dir)
+    if (parent === dir) {
+      for (const item of chain) names.set(item, null)
+      return undefined
+    }
+    dir = parent
+  }
+}
+
+function isLink(path: string) {
+  try {
+    return lstatSync(path).isSymbolicLink()
+  } catch {
+    return false
+  }
 }

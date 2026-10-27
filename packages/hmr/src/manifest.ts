@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, realpathSync } from 'node:fs'
+import { existsSync, lstatSync, readFileSync, realpathSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { dirname, join, sep } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
@@ -130,7 +130,24 @@ function resolveExports(exports: unknown, subpath: string, conditions: string[])
 // the side the lookup came from.
 function fresh(request: string, path: string, format?: string) {
   const dir = owner(path)
-  if (!dir) return undefined
+  if (!dir) {
+    // The resolved path may still be the old real path of a retargeted
+    // package; match the request's package name against an invalidated
+    // symlink and answer from the current directory instead. Normal package
+    // invalidations keep the original semantics.
+    for (const candidate of invalidated) {
+      let link = false
+      try {
+        link = lstatSync(candidate).isSymbolicLink()
+      } catch {}
+      if (!link) continue
+      const subpath = subpathOf(request, read(candidate)?.name)
+      if (subpath === undefined) continue
+      const target = resolveEntry(candidate, subpath, format)
+      if (target && target !== path) return target
+    }
+    return undefined
+  }
   const subpath = subpathOf(request, read(dir)?.name)
   if (subpath === undefined) return undefined
   const target = resolveEntry(dir, subpath, format)
