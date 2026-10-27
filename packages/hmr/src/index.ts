@@ -11,6 +11,7 @@ import { cjsChildren, cjsHas, cjsUrls, ModuleCache } from './cache.ts'
 import { invalidate } from './manifest.ts'
 import { groupUnits, type Stale, type Unit } from './unit.ts'
 import { fileURLToPath, pathToFileURL } from 'node:url'
+import { createRequire } from 'node:module'
 import { realpathSync } from 'node:fs'
 import picomatch from 'picomatch'
 import z from 'schemastery'
@@ -69,6 +70,43 @@ function toUrl(file: string | URL) {
   if (file instanceof URL) return file.href
   if (file.startsWith('file:')) return new URL(file).href
   return pathToFileURL(resolve(file)).href
+}
+
+// A Yarn PnP update rewrites `.pnp.cjs` and adds `.yarn/cache/<pkg>-<hash>.zip`;
+// neither path is a module URL, so a batch built from them is empty. A module
+// loaded from an archive carries that archive in its own URL, which is what
+// lets the update be attributed to the modules the archive served.
+const PNP_SIGNAL = /[\\/]\.pnp\.cjs$|[\\/][^\\/]+\.zip$/
+const PNP_MODULE = /\.zip[\\/]node_modules[\\/]|[\\/]\.yarn[\\/]unplugged[\\/]/
+
+function toComparable(url: string) {
+  try {
+    return (url.startsWith('file:') ? fileURLToPath(url) : url).replace(/\\/g, '/')
+  } catch {
+    return url.replace(/\\/g, '/')
+  }
+}
+
+export function isPnpSignal(url: string) {
+  return PNP_SIGNAL.test(toComparable(url))
+}
+
+const require = createRequire(import.meta.url)
+
+// Every module the process loaded from a PnP archive, read from the three
+// places a module can still be known: the ESM cache, the CJS cache, and the identity records.
+export function pnpUrls(internal: ModuleLoader, identity: IdentityStore): string[] {
+  const urls = new Set<string>()
+  const add = (key: string) => {
+    if (!PNP_MODULE.test(toComparable(key))) return
+    urls.add(key.startsWith('file:') ? key : pathToFileURL(key).href)
+  }
+  try {
+    for (const key of Map.prototype.keys.call(internal.loadCache) as Iterable<string>) add(key)
+  } catch {}
+  for (const key in require.cache) add(key)
+  for (const url of identity.urls()) add(url)
+  return [...urls]
 }
 
 class Hmr extends Service {
@@ -396,6 +434,16 @@ class Hmr extends Service {
     for (const url of [...options.files ?? []].map(file => toRealUrl(toUrl(file)))) add(url)
 
     const internal = this.internal
+
+    // an archive or its manifest is not a module: the batch becomes every
+    // module that archive served. Best-effort: attribution must never fail the
+    // reconcile it belongs to, so an unreadable cache leaves the batch as it is.
+    try {
+      if ([...files].some(isPnpSignal)) {
+        for (const url of pnpUrls(internal, this.identity)) files.add(url)
+      }
+    } catch {}
+
     const before = new Set(Map.prototype.keys.call(internal.loadCache) as Iterable<string>)
     const beforeCjs = new Set(cjsUrls())
 

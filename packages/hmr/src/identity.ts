@@ -128,6 +128,13 @@ export class IdentityStore {
     ])]
   }
 
+  // Every URL this store holds a record for. A module can be evicted from both
+  // module caches while a plugin still refers to it, so the records are the
+  // only place such a module remains visible.
+  urls(): string[] {
+    return [...this.records.values()].map(record => record.url)
+  }
+
   // Drop the record for `path`, e.g. once its module left the graph.
   forget(path: string) {
     this.records.delete(path)
