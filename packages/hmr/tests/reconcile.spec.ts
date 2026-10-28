@@ -1,7 +1,7 @@
 import { Context, Fiber, FiberState } from 'cordis'
 import { ModuleLoader, unwrapExports } from '@cordisjs/loader-utils'
 import Loader from '@cordisjs/plugin-loader'
-import { mkdirSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, rmSync, utimesSync, writeFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
@@ -418,6 +418,128 @@ export function apply(ctx, config) {
     const refreshed = await ctx.hmr.internal.import(entryUrl, import.meta.url, {})
     expect(refreshed.apply).to.not.equal(original.apply)
     expect(ctx.registry.get(refreshed)).to.equal(result.settledFibers[0].runtime)
+  })
+
+  it('reloads the plugins under a changed root', async () => {
+    await setup()
+    mkdirSync(resolve(fixtureDir, 'root'), { recursive: true })
+    const a = await load('root/a.ts', plugin('rootA', 'v1'))
+    const b = await load('root/b.ts', plugin('rootB', 'v1'))
+    const c = await load('root/c.ts', plugin('rootC', 'v1'))
+    const root = resolve(fixtureDir, 'root')
+
+    // the first pass records the baseline: a module loaded after the last
+    // observation cannot be proven unchanged, so it joins the batch once
+    const cold = await ctx.hmr.reconcile({ roots: [root] })
+    expect(cold.settledFibers).to.have.length(3)
+
+    writeFileSync(a, plugin('rootA', 'v2'))
+    writeFileSync(b, plugin('rootB', 'v2'))
+    writeFileSync(c, plugin('rootC', 'v2'))
+    const result = await ctx.hmr.reconcile({ roots: [root] })
+    expect(result.settledFibers).to.have.length(3)
+    expect(ctx.bail('reconcile/rootA' as any)).to.equal('v2')
+    expect(ctx.bail('reconcile/rootB' as any)).to.equal('v2')
+    expect(ctx.bail('reconcile/rootC' as any)).to.equal('v2')
+  })
+
+  it('covers a CJS-only module in the baseline taken at init', async () => {
+    // A CJS module that only another CJS module requires is in `require.cache`
+    // and never in `loadCache`. Loaded before the service starts, it must be
+    // part of the baseline, or the first roots reconcile reloads the plugin
+    // although no file was written.
+    const cPath = fixture('init-leaf.cjs', `exports.value = 'v1'\n`)
+    fixture('init-mid.cjs', `const { value } = require('./init-leaf.cjs')\n\nexports.value = value\n`)
+    const entry = fixture('init-entry.ts', `
+import { value } from './init-mid.cjs'
+
+export const name = 'initEntry'
+
+export async function apply(ctx: any) {
+  ctx.on('reconcile/initEntry' as any, () => value)
+}
+`)
+    ctx = new Context()
+    fiber = await ctx.plugin(Loader, { baseUrl: import.meta.url })
+    const id = await ctx.loader.create({ name: './__reconcile__/init-entry.ts' })
+    await ctx.loader.store[id]!.innerFiber!.await().catch(() => {})
+    expect(ctx.bail('reconcile/initEntry' as any)).to.equal('v1')
+    expect(createRequire(import.meta.url).cache[cPath]).to.be.ok
+
+    // the service starts only now, so everything loaded so far is the baseline
+    await ctx.plugin(Hmr)
+    const cold = await ctx.hmr.reconcile({ roots: [fixtureDir] })
+    expect(cold.settledFibers).to.have.length(0)
+    expect(ctx.bail('reconcile/initEntry' as any)).to.equal('v1')
+
+    // a real change to the leaf still reaches the plugin
+    writeFileSync(cPath, `exports.value = 'v2'\n`)
+    const result = await ctx.hmr.reconcile({ roots: [fixtureDir] })
+    expect(result.settledFibers).to.have.length(1)
+    expect(ctx.bail('reconcile/initEntry' as any)).to.equal('v2')
+  }, 30000)
+
+  it('produces no churn across repeated roots reconciles', async () => {
+    await setup()
+    await load('steady.ts', plugin('steady', 'v1'))
+    const cold = await ctx.hmr.reconcile({ roots: [fixtureDir] })
+    expect(cold.settledFibers).to.have.length(1)
+
+    for (let i = 0; i < 100; i++) {
+      const result = await ctx.hmr.reconcile({ roots: [fixtureDir] })
+      expect(result.settledFibers).to.have.length(0)
+      expect(result.importFailures).to.have.length(0)
+    }
+    expect(ctx.bail('reconcile/steady' as any)).to.equal('v1')
+  })
+
+  it('ignores a file under the root that was never loaded', async () => {
+    await setup()
+    await load('quiet.ts', plugin('quiet', 'v1'))
+    await ctx.hmr.reconcile({ roots: [fixtureDir] })
+
+    // a file a package operation just added: nothing has imported it, so it
+    // is neither recorded nor loaded and must not be reported
+    fixture('unrelated.ts', plugin('unrelated', 'v1'))
+    const result = await ctx.hmr.reconcile({ roots: [fixtureDir] })
+    expect(result.settledFibers).to.have.length(0)
+    expect(result.importFailures).to.have.length(0)
+  })
+
+  it('catches a same-size rewrite under a root that hides its timestamp', async () => {
+    await setup()
+    const path = await load('pinned.ts', plugin('pinned', 'v1'))
+    const url = pathToFileURL(path).href
+    await ctx.hmr.reconcile({ roots: [fixtureDir] })
+
+    // re-observe while the write is still young, then rewrite with the same
+    // size and pin the mtime back: the recorded fields are identical, so only
+    // the recorded content hash can tell the versions apart
+    const t = Date.now() / 1000
+    utimesSync(path, t, t)
+    ctx.hmr.identity.observe(url)
+    writeFileSync(path, plugin('pinned', 'v2'))
+    utimesSync(path, t, t)
+
+    const result = await ctx.hmr.reconcile({ roots: [fixtureDir] })
+    expect(result.settledFibers).to.have.length(1)
+    expect(ctx.bail('reconcile/pinned' as any)).to.equal('v2')
+  })
+
+  it('logs a debug message for a recorded file that is no longer loaded', async () => {
+    await setup()
+    await load('present.ts', plugin('present', 'v1'))
+    await ctx.hmr.reconcile({ roots: [fixtureDir] })
+
+    // recorded by an earlier observation, never imported, then removed
+    const missing = fixture('missing.ts', plugin('missing', 'v1'))
+    // @ts-expect-error - testing the internal behavior
+    ctx.hmr.identity.observe(pathToFileURL(missing).href)
+    rmSync(missing)
+
+    const spy = vi.spyOn(ctx.logger, 'debug')
+    await ctx.hmr.reconcile({ roots: [fixtureDir] })
+    expect(spy).toHaveBeenCalledWith('skip %C (%s)', expect.stringContaining('missing.ts'), 'not loaded')
   })
 
   it('refreshes a module that no plugin depends on for its next import', async () => {
