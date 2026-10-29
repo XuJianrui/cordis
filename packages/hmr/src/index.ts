@@ -4,6 +4,7 @@ import type {} from '@cordisjs/plugin-fs-node'
 import { AsyncLocalStorage } from 'node:async_hooks'
 import { relative, resolve, sep } from 'node:path'
 import { handleError } from './error.ts'
+import { IdentityStore } from './identity.ts'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { createRequire } from 'node:module'
 import picomatch from 'picomatch'
@@ -105,6 +106,11 @@ class Hmr extends Service {
   /** The CJS module cache is read through it. */
   private _require = createRequire(import.meta.url)
 
+  // the recorded identity of every module file a transaction has touched:
+  // the disk is compared against it, so a caller does not need to know which
+  // files an operation changed
+  private identity = new IdentityStore()
+
   /** The tail of the transaction queue. */
   private _queue: Promise<void> = Promise.resolve()
 
@@ -204,6 +210,13 @@ class Hmr extends Service {
         this.hostModules = await closure([mainUrl], url => this._edges(url))
       }
     }
+
+    // Record the identity of everything loaded so far, so the first
+    // `reconcile({ roots })` compares against a baseline; modules loaded
+    // later are covered at the end of the first transaction that touches them.
+    // A CJS module that only another CJS module required is in `require.cache`
+    // alone, so the baseline covers both caches, like every other read.
+    this.identity.observeAll(this._loaded())
   }
 
   /**
@@ -447,8 +460,9 @@ class Hmr extends Service {
   private async _reconcile(options: Hmr.ReconcileOptions): Promise<Hmr.Result> {
     const result: Hmr.Result = { settledFibers: [], importFailures: [], skippedHostModules: [] }
     await this._sweep()
+    const internal = this.internal
     const files = new Set<string>()
-    for (const url of [...options.files].map(toUrl)) {
+    const add = (url: string) => {
       // A change to a host module or to a loaded native addon cannot be
       // applied in place. It is skipped, and restarting is up to the caller.
       if (this.hostModules.has(url) || isNativeAddon(url) && !!this._require.cache[toPath(url)!]) {
@@ -457,9 +471,26 @@ class Hmr extends Service {
         files.add(url)
       }
     }
-    if (!files.size) return result
+    // The single place a change that needs no action is handled. The result
+    // only describes what was done, as the caller has nothing to act on here:
+    // a module that is not loaded cannot be reloaded, and its next import
+    // reads the file as it is on disk by itself. Logged, not reported.
+    const skip = (url: string, reason: string) => {
+      this.ctx.logger.debug('skip %C (%s)', this._relative(url), reason)
+    }
+    for (const url of [...options.files ?? []].map(toUrl)) add(url)
 
-    const internal = this.internal
+    const before = new Set(this._loaded())
+
+    // `roots` widens the batch to what a package operation may have rewritten.
+    // Only recorded or loaded files can matter.
+    if (options.roots) {
+      const loaded = this._loaded()
+      for (const root of options.roots) {
+        for (const url of this.identity.expand(toUrl(root), loaded)) add(url)
+      }
+    }
+    if (!files.size) return result
 
     // A module is loaded if it is in either module cache. In Node 24, a CJS
     // module imported via import() is in both of them.
@@ -469,13 +500,20 @@ class Hmr extends Service {
       if (loaded.has(url)) {
         changed.add(url)
       } else {
-        this.ctx.logger.debug('skip %C (not loaded)', this._relative(url))
+        skip(url, 'not loaded')
       }
     }
     if (!changed.size) return result
 
     const { accepted, declined, edges } = await this._analyze(changed)
     const oldEdges = (url: string) => edges.get(url) ?? []
+    const recordIdentity = () => {
+      const touched = new Set(accepted)
+      for (const url of this._loaded()) {
+        if (!before.has(url)) touched.add(url)
+      }
+      this.identity.observeAll(touched)
+    }
 
     // A plugin may be exported by several modules, e.g. an entry module that
     // re-exports its implementation. All of them are imported again together.
@@ -639,6 +677,10 @@ class Hmr extends Service {
       const failure = unit.attempts.find(attempt => attempt.failed)!
       result.importFailures.push({ urls: [...unit.modules], error: failure.error })
     }
+    if (!committed.length) {
+      recordIdentity()
+      return result
+    }
 
     // Stage 2: replace the plugins in place (synchronous).
     // A plugin may have been disposed while stage 1 was importing, in which
@@ -669,6 +711,7 @@ class Hmr extends Service {
     // a fiber below another restarted fiber may have been disposed by it
     result.settledFibers = fibers.filter(fiber => fiber.uid !== null)
 
+    recordIdentity()
     return result
   }
 }
@@ -701,7 +744,15 @@ namespace Hmr {
 
   export interface ReconcileOptions {
     /** absolute paths or `file:` URLs */
-    files: Iterable<string | URL>
+    files?: Iterable<string | URL>
+    /**
+     * Absolute paths or `file:` URLs of directories or files whose whole
+     * subtree may have been rewritten, e.g. by a package manager: every
+     * recorded or loaded module underneath whose content cannot be proven
+     * unchanged joins the batch. At least one of `files` and `roots` is
+     * required; when both are given the batches are unioned.
+     */
+    roots?: Iterable<string | URL>
   }
 
   /** The running state is brought in line with the changes, as far as they can be applied. */
