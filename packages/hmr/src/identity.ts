@@ -29,6 +29,9 @@ export interface Identity {
 export class IdentityStore {
   // realpath -> Identity
   private records = new Map<string, Identity>()
+  // url -> realpath, so that when a file is deleted and `toPath(url)` can no
+  // longer resolve via realpathSync, its record can still be found and pruned
+  private urls = new Map<string, string>()
 
   // `window`: how long after a write an observation of it stays suspicious,
   // in milliseconds. The write clock ticks about once per millisecond, so an
@@ -39,11 +42,23 @@ export class IdentityStore {
 
   observe(url: string): Identity | undefined {
     const path = toPath(url)
-    if (!path) return undefined
+    if (!path) {
+      this.unobserve(url)
+      return undefined
+    }
+    const oldPath = this.urls.get(url)
+    if (oldPath && oldPath !== path) {
+      this.records.delete(oldPath)
+    }
+    this.urls.set(url, path)
+
+    const st = stat(path)
+    if (!st) {
+      this.unobserve(url)
+      return undefined
+    }
     // the clock is read before the stat, so the window covers the stat itself
     const observedAt = Date.now()
-    const st = stat(path)
-    if (!st) return undefined
     const record: Identity = {
       path,
       url,
@@ -56,6 +71,16 @@ export class IdentityStore {
     if (!this.trustworthy(record)) record.hash = hashPath(path)
     this.records.set(path, record)
     return record
+  }
+
+  // Drop the record of a file that no longer resolves. A deleted file has no
+  // identity to keep: leaving the record behind would make every later
+  // `expand` report the ghost again, forever.
+  private unobserve(url: string): boolean {
+    const path = this.urls.get(url)
+    this.urls.delete(url)
+    if (path) return this.records.delete(path)
+    return false
   }
 
   observeAll(urls: Iterable<string>) {

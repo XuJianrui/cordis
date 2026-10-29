@@ -67,6 +67,24 @@ describe('IdentityStore', () => {
     expect(store.changed(url)).to.equal(true)
   })
 
+  it('prunes deleted files on observe without infinite churn', () => {
+    const store = new IdentityStore()
+    const url = fixture('deleted.js', 'content')
+    store.observe(url)
+    const root = pathToFileURL(fixtureDir).href
+
+    // First cycle: file is deleted, expand reports it as changed
+    rmSync(fileURLToPath(url))
+    expect(store.changed(url)).to.equal(true)
+    expect(store.expand(root, [])).to.deep.equal([url])
+
+    // Reconcile finishes and observes the batch
+    store.observe(url)
+
+    // Second cycle: deleted file record has been cleaned up, no phantom churn
+    expect(store.expand(root, [])).to.deep.equal([])
+  })
+
   it('treats a file without a record as changed', () => {
     const store = new IdentityStore()
     const url = fixture('fresh.js', 'content')
