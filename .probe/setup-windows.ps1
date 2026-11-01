@@ -30,8 +30,9 @@ New-Item -ItemType Directory -Force -Path $short | Out-Null
 $fso = New-Object -ComObject Scripting.FileSystemObject
 try {
   $shortPath = $fso.GetFolder($short).ShortPath
-  Add-Content $roots "short=$shortPath"
-  Add-Content $status "short=ok:$shortPath"
+  # Recorded, not probed: this runner's temp volume has 8.3 names disabled, so the
+  # "short" path equals the long one and cannot exercise the abort.
+  Add-Content $status "short=$shortPath"
 } catch {
   Add-Content $status "short=fail:$($_.Exception.Message)"
 }
@@ -39,7 +40,8 @@ try {
 # The same volume reached through the administrative share: UNC without SMB server.
 $uncDir = Join-Path $env:SystemDrive 'probe262-unc'
 New-Item -ItemType Directory -Force -Path $uncDir | Out-Null
-Add-Content $roots "unc=\\localhost\$($env:SystemDrive.TrimEnd(':'))\$\probe262-unc"
+$drive = $env:SystemDrive.TrimEnd(':')
+Add-Content $roots ('unc=\\localhost\' + $drive + '$\probe262-unc')
 Add-Content $status "unc=ok:$uncDir"
 
 Write-Output '--- roots'; Get-Content $roots
