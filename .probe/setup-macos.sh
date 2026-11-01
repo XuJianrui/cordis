@@ -52,6 +52,7 @@ mkdir -p "$BASE/smbshare" && chmod 777 "$BASE/smbshare"
 sudo launchctl load -w /System/Library/LaunchDaemons/com.apple.smbd.plist >/dev/null 2>&1 || true
 sudo defaults write /Library/Preferences/SystemConfiguration/com.apple.smb.server.plist EnabledServices -array disk >/dev/null 2>&1 || true
 sudo defaults write /Library/Preferences/SystemConfiguration/com.apple.smb.server.plist AllowGuestAccess -bool true >/dev/null 2>&1 || true
+sudo defaults write /Library/Preferences/SystemConfiguration/com.apple.smb.server.plist GuestAccess -bool true >/dev/null 2>&1 || true
 sudo sharing -a "$BASE/smbshare" -S probe262 >/dev/null 2>&1 || true
 sudo launchctl kickstart -k system/com.apple.smbd >/dev/null 2>&1 || true
 sleep 3
@@ -103,14 +104,20 @@ elif perl -e 'alarm 180; exec @ARGV' pip3 install --user --break-system-packages
 fi
 if [ -n "$dav_pip" ]; then
   status dav-pip "$dav_pip"
-  (cd "$BASE/davshare" && nohup python3 -m wsgidav.server.server_cli --host 127.0.0.1 --port 8765 --root "$BASE/davshare" >/dev/null 2>&1 &)
+  (cd "$BASE/davshare" && nohup python3 -m wsgidav.server.server_cli --host 127.0.0.1 --port 8765 --root "$BASE/davshare" > "$RT/dav-server.log" 2>&1 &)
   sleep 3
+  status dav-http "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8765/ 2>&1 || true)"
   mkdir -p "$BASE/dav"
-  if perl -e 'alarm 30; exec @ARGV' mount_webdav "http://127.0.0.1:8765/" "$BASE/dav" 2>>"$STATUS"; then
-    add dav "$BASE/dav"
-  else
-    status dav fail-mount
-  fi
+  dav_ok=0
+  for url in "http://127.0.0.1:8765/" "http://127.0.0.1:8765"; do
+    if perl -e 'alarm 30; exec @ARGV' mount_webdav "$url" "$BASE/dav" 2>>"$STATUS"; then
+      add dav "$BASE/dav"
+      status dav-url "$url"
+      dav_ok=1
+      break
+    fi
+  done
+  [ "$dav_ok" = 1 ] || status dav fail-mount
 else
   status dav fail-pip
 fi
