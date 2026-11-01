@@ -1,0 +1,94 @@
+name: Probe 262
+
+# Environment probes for cordis#262. This workflow exists only on probe branches;
+# it does not run on main and does not publish anything.
+on:
+  push:
+    branches:
+      - probe-262-env
+  workflow_dispatch:
+
+jobs:
+  probe:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        node: [24, 26]
+
+    steps:
+      - name: Check out
+        uses: actions/checkout@v6
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: ${{ matrix.node }}
+      - name: Install Corepack
+        run: npm install -g --force corepack@latest
+      - name: Enable Corepack
+        run: corepack enable
+      - name: Install
+        run: yarn --no-immutable
+
+      - name: Prepare roots (Linux)
+        if: runner.os == 'Linux'
+        continue-on-error: true
+        shell: bash
+        run: bash .probe/setup-linux.sh
+
+      - name: Prepare roots (macOS)
+        if: runner.os == 'macOS'
+        continue-on-error: true
+        shell: bash
+        run: bash .probe/setup-macos.sh
+
+      - name: Prepare roots (Windows)
+        if: runner.os == 'Windows'
+        continue-on-error: true
+        shell: pwsh
+        run: ./.probe/setup-windows.ps1
+
+      - name: Roots probe (chokidar with driver options)
+        continue-on-error: true
+        shell: bash
+        run: |
+          RT="${RUNNER_TEMP}"
+          if command -v cygpath >/dev/null 2>&1; then RT="$(cygpath -u "${RUNNER_TEMP}")"; fi
+          export PROBE262_ROOTS="$(paste -sd';' "$RT/roots.txt")"
+          export PROBE262_RUNS=3
+          echo "roots: $PROBE262_ROOTS"
+          node .probe/roots.mjs 2>&1 | tee "$RT/roots-probe.log"
+
+      - name: Driver probe (ctx.fs.watch + include baseUrl)
+        continue-on-error: true
+        shell: bash
+        run: |
+          RT="${RUNNER_TEMP}"
+          if command -v cygpath >/dev/null 2>&1; then RT="$(cygpath -u "${RUNNER_TEMP}")"; fi
+          export PROBE262_ROOTS="$(paste -sd';' "$RT/roots.txt")"
+          export PROBE262_RUNS=3
+          node node_modules/vitest/vitest.mjs run --config .probe/vitest.probe.config.ts \
+            packages/fs-node/tests/zz-probe-262-roots.spec.ts \
+            packages/include/tests/zz-probe-262-baseurl.spec.ts 2>&1 | tee "$RT/driver-probe.log"
+
+      - name: Symlink follow probe
+        continue-on-error: true
+        shell: bash
+        run: |
+          RT="${RUNNER_TEMP}"
+          if command -v cygpath >/dev/null 2>&1; then RT="$(cygpath -u "${RUNNER_TEMP}")"; fi
+          node .probe/symlink-follow.mjs 2>&1 | tee "$RT/symlink-probe.log"
+
+      - name: Upload readings
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: probe-262-${{ matrix.os }}-node${{ matrix.node }}
+          path: |
+            ${{ runner.temp }}/roots.txt
+            ${{ runner.temp }}/mount-status.txt
+            ${{ runner.temp }}/roots-probe.log
+            ${{ runner.temp }}/driver-probe.log
+            ${{ runner.temp }}/symlink-probe.log
+          if-no-files-found: warn
