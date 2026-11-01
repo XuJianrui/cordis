@@ -29,5 +29,6 @@ else
   status nfs fail-mount
 fi
 
+echo "--- nfs diag"; cat "$RT/nfs-diag.txt" 2>/dev/null || true
 echo "--- roots"; cat "$ROOTS"
 echo "--- status"; cat "$STATUS"

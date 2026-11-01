@@ -205,6 +205,7 @@ async function grid(root) {
         const cb = []
         const errors = []
         const isFile = shape === 'file'
+        let post
         let watcher
         try {
           watcher = watch(dir, {
@@ -227,7 +228,7 @@ async function grid(root) {
           await new Promise(resolve => watcher.once('ready', resolve))
           await sleep(150)
           await op(dir, file)
-          const post = postState(name, dir, file)
+          post = postState(name, dir, file)
           await sleep(settleMs)
         } catch (error) {
           raw.push(`error:${error.code ?? error.message}`)

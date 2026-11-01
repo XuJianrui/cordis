@@ -222,6 +222,8 @@ it('probe 262: real driver on each root', async () => {
       env: { ...process.env, PROBE262_ROOTS: roots },
     })
     console.log(output)
+    // A crashed grid must not look like a green test.
+    if (!output.includes('PROBE262_ROOTS_DONE')) throw new Error('grid did not finish')
   } catch (error: any) {
     console.log('PROBE262_GRID_FAILED ' + (error?.message ?? error))
     if (error?.stdout) console.log(String(error.stdout))

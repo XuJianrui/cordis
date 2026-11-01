@@ -4,6 +4,7 @@
 // runs the five cases with 24.19.0 and with the job's Node.
 import { execFileSync } from 'node:child_process'
 import { existsSync, mkdirSync } from 'node:fs'
+import { homedir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { it } from 'vitest'
@@ -19,24 +20,34 @@ function ps(command: string) {
 }
 
 it.runIf(process.platform === 'win32')('probe 262: 8.3 short root in CI', () => {
-  const drive = rt.slice(0, 2)
-  const long = join(rt, 'probe262-shortpath-volume-' + Date.now())
-  mkdirSync(long, { recursive: true })
-  try {
-    ps(`fsutil 8dot3name set ${drive} 0`)
-  } catch (error: any) {
-    console.log('SHORTPATH_FSUTIL_FAILED ' + (error?.message ?? error))
+  const created: string[] = []
+  function tryShort(baseDir: string) {
+    const long = join(baseDir, 'probe262-shortpath-volume-' + Date.now() + '-' + created.length)
+    mkdirSync(long, { recursive: true })
+    created.push(long)
+    let short = ''
+    try {
+      short = ps(`(New-Object -ComObject Scripting.FileSystemObject).GetFolder("${long}").ShortPath`).trim()
+    } catch (error: any) {
+      console.log('SHORTPATH_SHORT_FAILED ' + (error?.message ?? error))
+    }
+    return { long, short, available: !!short && short !== long && existsSync(short) }
   }
 
-  let short = ''
-  try {
-    short = ps(`(New-Object -ComObject Scripting.FileSystemObject).GetFolder("${long}").ShortPath`).trim()
-  } catch (error: any) {
-    console.log('SHORTPATH_SHORT_FAILED ' + (error?.message ?? error))
+  // The temp volume often has 8.3 disabled; the user profile volume usually has it.
+  let result = tryShort(rt)
+  console.log('SHORTPATH_ENV ' + JSON.stringify({ base: rt, ...result }))
+  if (!result.available) {
+    try {
+      ps('fsutil 8dot3name set C: 0')
+    } catch (error: any) {
+      console.log('SHORTPATH_FSUTIL_FAILED ' + (error?.message ?? error))
+    }
+    result = tryShort(homedir())
+    console.log('SHORTPATH_ENV ' + JSON.stringify({ base: homedir(), ...result }))
   }
-  const available = !!short && short !== long && existsSync(short)
-  console.log('SHORTPATH_ENV ' + JSON.stringify({ drive, long, short, available }))
-  if (!available) return
+  if (!result.available) return
+  const { long, short } = result
 
   const zip = join(rt, 'node-v24.19.0-win-x64.zip')
   const dir = join(rt, 'node-v24.19.0-win-x64')
@@ -65,7 +76,9 @@ it.runIf(process.platform === 'win32')('probe 262: 8.3 short root in CI', () => 
       if (error?.stdout) console.log(String(error.stdout))
     }
   }
-  try {
-    ps(`Remove-Item -LiteralPath "${long}" -Recurse -Force -ErrorAction SilentlyContinue`)
-  } catch {}
+  for (const dir of created) {
+    try {
+      ps(`Remove-Item -LiteralPath "${dir}" -Recurse -Force -ErrorAction SilentlyContinue`)
+    } catch {}
+  }
 }, 600_000)
