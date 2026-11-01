@@ -153,10 +153,15 @@ if [ -n "$dav_pip" ]; then
   status dav-http "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8765/ 2>&1 || true)"
   mkdir -p "$BASE/dav"
   dav_ok=0
-  for url in "http://127.0.0.1:8765/" "http://127.0.0.1:8765"; do
-    if perl -e 'alarm 30; exec @ARGV' mount_webdav "$url" "$BASE/dav" 2>>"$STATUS"; then
+  for spec in \
+    "-S -v probe262|http://127.0.0.1:8765/" \
+    "-S -v probe262|http://127.0.0.1:8765" \
+    "|http://127.0.0.1:8765/"; do
+    opts="${spec%%|*}"
+    url="${spec#*|}"
+    if perl -e 'alarm 30; exec @ARGV' mount_webdav $opts "$url" "$BASE/dav" 2>>"$STATUS"; then
       add dav "$BASE/dav"
-      status dav-url "$url"
+      status dav-opts "$opts $url"
       dav_ok=1
       break
     fi
