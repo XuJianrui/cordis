@@ -132,8 +132,9 @@ async function remoteWriteCase(rootPath, backing) {
   } finally {
     await watcher?.close()
   }
-  rmSync(dir, { recursive: true, force: true })
-  rmSync(join(backing, 'remote'), { recursive: true, force: true })
+  // Best effort: a mount view and its backing directory can disagree.
+  try { rmSync(dir, { recursive: true, force: true }) } catch {}
+  try { rmSync(join(backing, 'remote'), { recursive: true, force: true }) } catch {}
   return events
 }
 

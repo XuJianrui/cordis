@@ -224,6 +224,8 @@ it('probe 262: real driver on each root', async () => {
     console.log(output)
   } catch (error: any) {
     console.log('PROBE262_GRID_FAILED ' + (error?.message ?? error))
+    if (error?.stdout) console.log(String(error.stdout))
+    if (error?.stderr) console.log(String(error.stderr))
   }
   for (const root of parseRoots()) {
     const result: any = { label: root.label, path: root.path, platform: process.platform, node: process.version, cells: {} }
