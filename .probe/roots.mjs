@@ -119,6 +119,7 @@ async function remoteWriteCase(rootPath, backing) {
   mkdirSync(join(backing, 'remote'), { recursive: true })
   const events = []
   let watcher
+  let visible = false
   try {
     watcher = watch(dir, { ignoreInitial: true })
     watcher.on('all', (event, path) => events.push(`${event}:${relative(dir, path)}`))
@@ -126,16 +127,40 @@ async function remoteWriteCase(rootPath, backing) {
     await new Promise(resolve => watcher.once('ready', resolve))
     await sleep(150)
     writeFileSync(join(backing, 'remote', 'from-server.txt'), 'x')
+    visible = exists(join(dir, 'from-server.txt'))
     await sleep(settleMs)
   } catch (error) {
     events.push(`error:${error.code ?? error.message}`)
   } finally {
     await watcher?.close()
   }
+  events.push(`visible:${visible}`)
   // Best effort: a mount view and its backing directory can disagree.
   try { rmSync(dir, { recursive: true, force: true }) } catch {}
   try { rmSync(join(backing, 'remote'), { recursive: true, force: true }) } catch {}
   return events
+}
+
+function exists(path) {
+  try { statSync(path); return true } catch { return false }
+}
+
+/** Did the operation actually reach the state the cell is supposed to test? */
+function postState(name, dir, file) {
+  switch (name) {
+    case 'delete':
+      return { fileExists: exists(file) }
+    case 'mkdir-inside':
+      return { subExists: exists(join(dir, 'sub')) }
+    case 'nested-create':
+      return { nestedExists: exists(join(dir, 'nested', 'deep.txt')) }
+    case 'case-rename': {
+      const upper = join(dirname(file), basename(file).toUpperCase())
+      return { same: upper === file, upperExists: exists(upper), fileExists: exists(file) }
+    }
+    default:
+      return { fileExists: exists(file) }
+  }
 }
 
 const cells = [
@@ -202,13 +227,14 @@ async function grid(root) {
           await new Promise(resolve => watcher.once('ready', resolve))
           await sleep(150)
           await op(dir, file)
+          const post = postState(name, dir, file)
           await sleep(settleMs)
         } catch (error) {
           raw.push(`error:${error.code ?? error.message}`)
         } finally {
           await watcher?.close()
         }
-        readings.push({ raw, cb, errors })
+        readings.push({ raw, cb, errors, post })
         rmSync(dir, { recursive: true, force: true })
       }
       out[`${shape}:${name}`] = readings
