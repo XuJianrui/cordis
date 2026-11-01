@@ -4,6 +4,7 @@ import { join, relative, resolve, sep } from 'node:path'
 import { watch } from 'chokidar'
 
 const settleMs = Number(process.env.PROBE262_SETTLE_MS || 500)
+const seedSettleMs = Number(process.env.PROBE262_SEED_SETTLE_MS || 1000)
 const runs = Number(process.env.PROBE262_RUNS || 5)
 const base = mkdtempSync(join(process.env.PROBE262_BASE || process.env.RUNNER_TEMP || tmpdir(), 'cordis-262-grid-'))
 const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms))
@@ -36,6 +37,8 @@ for (const shape of ['file', 'dir']) {
       mkdirSync(dir, { recursive: true })
       const file = join(dir, 'watched.txt')
       writeFileSync(file, 'seed')
+      // Let a delayed initial-write event drain before the watcher starts.
+      await sleep(seedSettleMs)
       const raw = []
       const cb = []
       const isFile = shape === 'file'
@@ -71,6 +74,7 @@ console.log('GRID_ENV ' + JSON.stringify({
   arch: process.arch,
   chokidar,
   settleMs,
+  seedSettleMs,
   runs,
   tmpdir: base,
 }))

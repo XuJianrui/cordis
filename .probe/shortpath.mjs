@@ -70,6 +70,8 @@ const cases = {
   longFile: run(join(longDir, 'file.txt'), join(longDir, 'file.txt')),
 }
 for (const [name, result] of Object.entries(cases)) {
+  result.events = Number((result.stdout || '').match(/SHORTPATH_EVENTS (\d+)/)?.[1] || 0)
+  result.conclusive = result.status === 'error' || result.events > 0
   console.log(`SHORTPATH_CASE ${name} ${JSON.stringify(result)}`)
 }
 
