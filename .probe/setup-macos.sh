@@ -58,6 +58,7 @@ if command -v brew >/dev/null 2>&1; then
     cat > "$BASE/smb.conf" <<CONF
 [global]
   workgroup = WORKGROUP
+  server role = standalone server
   server min protocol = SMB2
   map to guest = bad user
   guest account = nobody
@@ -66,6 +67,7 @@ if command -v brew >/dev/null 2>&1; then
   state directory = $BASE/smb-run
   cache directory = $BASE/smb-run
   private dir = $BASE/smb-run
+  ncalrpc dir = $BASE/smb-run
   log file = $BASE/smb-run/log.%m
 [probe262]
   path = $BASE/smbshare
@@ -73,8 +75,11 @@ if command -v brew >/dev/null 2>&1; then
   guest ok = yes
   force user = $(whoami)
 CONF
-    sudo -b "$SMB_PREFIX/sbin/smbd" -F --no-process-group -s "$BASE/smb.conf" -p 445 >/dev/null 2>&1 || true
-    sleep 4
+    sudo pkill -x smbd >/dev/null 2>&1 || true
+    sleep 1
+    sudo "$SMB_PREFIX/sbin/smbd" -D -s "$BASE/smb.conf" -p 445 >/dev/null 2>&1 || true
+    sleep 5
+    { pgrep -fl smbd || true; lsof -nP -i :445 || true; tail -8 "$BASE/smb-run/log.smbd" 2>/dev/null || true; } > "$RT/smb-brew-diag.txt" 2>&1 || true
     mkdir -p "$BASE/smb"
     if perl -e 'alarm 25; exec @ARGV' mount_smbfs -N "//guest@localhost/probe262" "$BASE/smb" 2>>"$STATUS"; then
       add smb "$BASE/smb"
