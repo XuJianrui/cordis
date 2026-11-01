@@ -166,7 +166,7 @@ function postState(name, dir, file) {
 const cells = [
   ['write', async (dir, file) => { writeFileSync(file, 'v') }],
   ['delete', async (dir, file) => { rmSync(file, { force: true }) }],
-  ...['0', '20', '200'].map(ms => [`recreate-${ms}`, async (dir, file) => {
+  ...['0', '20', '200', '1000', '1500'].map(ms => [`recreate-${ms}`, async (dir, file) => {
     rmSync(file, { force: true })
     await sleep(Number(ms))
     writeFileSync(file, 'v')

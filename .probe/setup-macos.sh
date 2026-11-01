@@ -47,49 +47,88 @@ for opts in \
 done
 [ "$mounted" = 1 ] || status nfs fail-mount
 
-# --- SMB via the built-in smbd: diagnostics, guest, then a real local user -----
-mkdir -p "$BASE/smbshare" && chmod 777 "$BASE/smbshare"
-sudo launchctl load -w /System/Library/LaunchDaemons/com.apple.smbd.plist >/dev/null 2>&1 || true
-sudo defaults write /Library/Preferences/SystemConfiguration/com.apple.smb.server.plist EnabledServices -array disk >/dev/null 2>&1 || true
-sudo defaults write /Library/Preferences/SystemConfiguration/com.apple.smb.server.plist AllowGuestAccess -bool true >/dev/null 2>&1 || true
-sudo defaults write /Library/Preferences/SystemConfiguration/com.apple.smb.server.plist GuestAccess -bool true >/dev/null 2>&1 || true
-sudo sharing -a "$BASE/smbshare" -S probe262 >/dev/null 2>&1 || true
-sudo launchctl kickstart -k system/com.apple.smbd >/dev/null 2>&1 || true
-sleep 3
-{
-  echo "--- launchctl"; sudo launchctl list | grep -i smbd || true
-  echo "--- sharing"; sudo sharing -l || true
-  echo "--- view guest"; sudo smbutil view -N //localhost || true
-} > "$RT/smb-diag.txt" 2>&1 || true
-# A real account gives mount_smbfs something to authenticate as.
-sudo dscl . -passwd /Users/runner 'probe262pw' >/dev/null 2>&1 || true
-mkdir -p "$BASE/smb"
+# --- SMB: Homebrew Samba first, then the built-in smbd -------------------------
 smb_ok=0
-for target in \
-  "//guest@localhost/probe262" \
-  "//runner:probe262pw@localhost/probe262" \
-  "//localhost/probe262"; do
-  if perl -e 'alarm 25; exec @ARGV' mount_smbfs -N "$target" "$BASE/smb" 2>>"$STATUS"; then
-    add smb "$BASE/smb"
-    status smb-target "$target"
-    smb_ok=1
-    break
+mkdir -p "$BASE/smbshare" && chmod 777 "$BASE/smbshare"
+export PATH="/opt/homebrew/bin:/usr/local/bin:$PATH"
+if command -v brew >/dev/null 2>&1; then
+  if perl -e 'alarm 300; exec @ARGV' brew install samba > "$RT/brew-samba.log" 2>&1; then
+    SMB_PREFIX="$(brew --prefix samba)"
+    mkdir -p "$BASE/smb-run"
+    cat > "$BASE/smb.conf" <<CONF
+[global]
+  workgroup = WORKGROUP
+  server min protocol = SMB2
+  map to guest = bad user
+  guest account = nobody
+  pid directory = $BASE/smb-run
+  lock directory = $BASE/smb-run
+  state directory = $BASE/smb-run
+  cache directory = $BASE/smb-run
+  private dir = $BASE/smb-run
+  log file = $BASE/smb-run/log.%m
+[probe262]
+  path = $BASE/smbshare
+  read only = no
+  guest ok = yes
+  force user = $(whoami)
+CONF
+    sudo -b "$SMB_PREFIX/sbin/smbd" -F --no-process-group -s "$BASE/smb.conf" -p 445 >/dev/null 2>&1 || true
+    sleep 4
+    mkdir -p "$BASE/smb"
+    if perl -e 'alarm 25; exec @ARGV' mount_smbfs -N "//guest@localhost/probe262" "$BASE/smb" 2>>"$STATUS"; then
+      add smb "$BASE/smb"
+      status smb-target "brew:guest@localhost"
+      smb_ok=1
+    else
+      status smb-brew fail-mount
+    fi
+  else
+    status smb-brew fail-install
   fi
-done
-if [ "$smb_ok" = 1 ]; then :; else
-  # A dedicated local account is the last authentication path: guest is often
-  # disabled and the runner account may have no SMB-usable password.
-  sudo sysadminctl -addUser probe262 -password probe262pw -admin >/dev/null 2>&1 || true
-  sudo dscl . -create /Users/probe262 >/dev/null 2>&1 || true
-  sudo dscl . -passwd /Users/probe262 probe262pw >/dev/null 2>&1 || true
-  sudo dscl . -create /Users/probe262 UniqueID 1001 >/dev/null 2>&1 || true
-  sudo dscl . -create /Users/probe262 PrimaryGroupID 20 >/dev/null 2>&1 || true
-  sudo dscl . -create /Users/probe262 UserShell /bin/bash >/dev/null 2>&1 || true
-  sudo dscl . -create /Users/probe262 NFSHomeDirectory /Users/probe262 >/dev/null 2>&1 || true
-  if perl -e 'alarm 25; exec @ARGV' mount_smbfs -N "//probe262:probe262pw@localhost/probe262" "$BASE/smb" 2>>"$STATUS"; then
-    add smb "$BASE/smb"
-    status smb-target "//probe262@localhost/probe262"
-    smb_ok=1
+else
+  status smb-brew no-brew
+fi
+
+if [ "$smb_ok" = 0 ]; then
+  sudo launchctl load -w /System/Library/LaunchDaemons/com.apple.smbd.plist >/dev/null 2>&1 || true
+  sudo defaults write /Library/Preferences/SystemConfiguration/com.apple.smb.server.plist EnabledServices -array disk >/dev/null 2>&1 || true
+  sudo defaults write /Library/Preferences/SystemConfiguration/com.apple.smb.server.plist AllowGuestAccess -bool true >/dev/null 2>&1 || true
+  sudo defaults write /Library/Preferences/SystemConfiguration/com.apple.smb.server.plist GuestAccess -bool true >/dev/null 2>&1 || true
+  sudo sharing -a "$BASE/smbshare" -S probe262 >/dev/null 2>&1 || true
+  sudo launchctl kickstart -k system/com.apple.smbd >/dev/null 2>&1 || true
+  sleep 3
+  {
+    echo "--- launchctl"; sudo launchctl list | grep -i smbd || true
+    echo "--- sharing"; sudo sharing -l || true
+    echo "--- view guest"; sudo smbutil view -N //localhost || true
+  } > "$RT/smb-diag.txt" 2>&1 || true
+  sudo dscl . -passwd /Users/runner 'probe262pw' >/dev/null 2>&1 || true
+  mkdir -p "$BASE/smb"
+  for target in \
+    "//guest@localhost/probe262" \
+    "//runner:probe262pw@localhost/probe262" \
+    "//localhost/probe262"; do
+    if perl -e 'alarm 25; exec @ARGV' mount_smbfs -N "$target" "$BASE/smb" 2>>"$STATUS"; then
+      add smb "$BASE/smb"
+      status smb-target "$target"
+      smb_ok=1
+      break
+    fi
+  done
+  if [ "$smb_ok" = 0 ]; then
+    sudo sysadminctl -addUser probe262 -password probe262pw -admin >/dev/null 2>&1 || true
+    sudo dscl . -create /Users/probe262 >/dev/null 2>&1 || true
+    sudo dscl . -passwd /Users/probe262 probe262pw >/dev/null 2>&1 || true
+    sudo dscl . -create /Users/probe262 UniqueID 1001 >/dev/null 2>&1 || true
+    sudo dscl . -create /Users/probe262 PrimaryGroupID 20 >/dev/null 2>&1 || true
+    sudo dscl . -create /Users/probe262 UserShell /bin/bash >/dev/null 2>&1 || true
+    sudo dscl . -create /Users/probe262 NFSHomeDirectory /Users/probe262 >/dev/null 2>&1 || true
+    if perl -e 'alarm 25; exec @ARGV' mount_smbfs -N "//probe262:probe262pw@localhost/probe262" "$BASE/smb" 2>>"$STATUS"; then
+      add smb "$BASE/smb"
+      status smb-target "//probe262@localhost/probe262"
+      smb_ok=1
+    fi
   fi
 fi
 [ "$smb_ok" = 1 ] || status smb fail-mount
