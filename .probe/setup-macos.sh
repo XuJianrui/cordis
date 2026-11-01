@@ -138,7 +138,7 @@ if [ "$smb_ok" = 0 ]; then
 fi
 [ "$smb_ok" = 1 ] || status smb fail-mount
 
-# --- WebDAV: a third network protocol, independent of smbd --------------------
+# --- WebDAV: three mount spellings against a local anonymous server ----------
 mkdir -p "$BASE/davshare"
 dav_pip=""
 if perl -e 'alarm 180; exec @ARGV' python3 -m pip install --user --break-system-packages --quiet --disable-pip-version-check wsgidav cheroot >/dev/null 2>&1; then
@@ -147,16 +147,20 @@ elif perl -e 'alarm 180; exec @ARGV' pip3 install --user --break-system-packages
   dav_pip="pip3-user"
 fi
 if [ -n "$dav_pip" ]; then
-  status dav-pip "$dav_pip"
   (cd "$BASE/davshare" && nohup python3 -m wsgidav.server.server_cli --host 127.0.0.1 --port 8765 --root "$BASE/davshare" --auth anonymous > "$RT/dav-server.log" 2>&1 &)
   sleep 3
   status dav-http "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8765/ 2>&1 || true)"
-  mkdir -p "$BASE/dav"
   dav_ok=0
-  for url in "http://127.0.0.1:8765/" "http://127.0.0.1:8765"; do
-    if perl -e 'alarm 30; exec @ARGV' mount_webdav "$url" "$BASE/dav" 2>>"$STATUS"; then
+  for spec in \
+    "-S -v probe262|http://127.0.0.1:8765/" \
+    "-i|http://127.0.0.1:8765/" \
+    "-v probe262|http://127.0.0.1:8765"; do
+    opts="${spec%%|*}"
+    url="${spec#*|}"
+    mkdir -p "$BASE/dav"
+    if perl -e 'alarm 30; exec @ARGV' mount_webdav $opts "$url" "$BASE/dav" 2>>"$STATUS"; then
       add dav "$BASE/dav"
-      status dav-url "$url"
+      status dav-opts "$opts $url"
       dav_ok=1
       break
     fi
@@ -166,6 +170,7 @@ else
   status dav fail-pip
 fi
 
+echo "--- dav log"; tail -10 "$RT/dav-server.log" 2>/dev/null || true
 echo "--- nfs diag"; cat "$RT/nfs-diag.txt" 2>/dev/null || true
 echo "--- smb diag"; cat "$RT/smb-diag.txt" 2>/dev/null || true
 echo "--- roots"; cat "$ROOTS"
