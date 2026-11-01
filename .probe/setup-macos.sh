@@ -75,11 +75,34 @@ for target in \
     break
   fi
 done
+if [ "$smb_ok" = 1 ]; then :; else
+  # A dedicated local account is the last authentication path: guest is often
+  # disabled and the runner account may have no SMB-usable password.
+  sudo sysadminctl -addUser probe262 -password probe262pw -admin >/dev/null 2>&1 || true
+  sudo dscl . -create /Users/probe262 >/dev/null 2>&1 || true
+  sudo dscl . -passwd /Users/probe262 probe262pw >/dev/null 2>&1 || true
+  sudo dscl . -create /Users/probe262 UniqueID 1001 >/dev/null 2>&1 || true
+  sudo dscl . -create /Users/probe262 PrimaryGroupID 20 >/dev/null 2>&1 || true
+  sudo dscl . -create /Users/probe262 UserShell /bin/bash >/dev/null 2>&1 || true
+  sudo dscl . -create /Users/probe262 NFSHomeDirectory /Users/probe262 >/dev/null 2>&1 || true
+  if perl -e 'alarm 25; exec @ARGV' mount_smbfs -N "//probe262:probe262pw@localhost/probe262" "$BASE/smb" 2>>"$STATUS"; then
+    add smb "$BASE/smb"
+    status smb-target "//probe262@localhost/probe262"
+    smb_ok=1
+  fi
+fi
 [ "$smb_ok" = 1 ] || status smb fail-mount
 
 # --- WebDAV: a third network protocol, independent of smbd --------------------
 mkdir -p "$BASE/davshare"
-if perl -e 'alarm 180; exec @ARGV' python3 -m pip install --quiet --disable-pip-version-check wsgidav cheroot >/dev/null 2>&1; then
+dav_pip=""
+if perl -e 'alarm 180; exec @ARGV' python3 -m pip install --user --break-system-packages --quiet --disable-pip-version-check wsgidav cheroot >/dev/null 2>&1; then
+  dav_pip="python3-user"
+elif perl -e 'alarm 180; exec @ARGV' pip3 install --user --break-system-packages --quiet --disable-pip-version-check wsgidav cheroot >/dev/null 2>&1; then
+  dav_pip="pip3-user"
+fi
+if [ -n "$dav_pip" ]; then
+  status dav-pip "$dav_pip"
   (cd "$BASE/davshare" && nohup python3 -m wsgidav.server.server_cli --host 127.0.0.1 --port 8765 --root "$BASE/davshare" >/dev/null 2>&1 &)
   sleep 3
   mkdir -p "$BASE/dav"
