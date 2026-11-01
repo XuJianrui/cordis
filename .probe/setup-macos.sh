@@ -39,6 +39,8 @@ for opts in \
   "vers=3,soft,timeo=10"; do
   if sudo mount -t nfs -o "$opts" "localhost:$BASE/nfsshare" "$BASE/nfs" 2>>"$STATUS"; then
     add nfs "$BASE/nfs"
+    status nfs-opts "$opts"
+    echo "nfs=$BASE/nfsshare" > "$RT/remote.txt"
     mounted=1
     break
   fi
@@ -54,7 +56,7 @@ sudo sharing -a "$BASE/smbshare" -S probe262 >/dev/null 2>&1 || true
 sudo launchctl kickstart -k system/com.apple.smbd >/dev/null 2>&1 || true
 sleep 2
 mkdir -p "$BASE/smb"
-if mount_smbfs -N "//guest@localhost/probe262" "$BASE/smb" 2>>"$STATUS"; then
+if perl -e 'alarm 30; exec @ARGV' mount_smbfs -N "//guest@localhost/probe262" "$BASE/smb" 2>>"$STATUS"; then
   add smb "$BASE/smb"
 else
   status smb fail-mount
