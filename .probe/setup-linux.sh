@@ -69,5 +69,10 @@ else
   status overlay fail-mount
 fi
 
+# Backing directories, used to simulate a write by another client.
+: > "$RT/remote.txt"
+[ -d "$BASE/sshshare" ] && echo "sshfs=$BASE/sshshare" >> "$RT/remote.txt"
+[ -d "$BASE/nfsshare" ] && echo "nfs=$BASE/nfsshare" >> "$RT/remote.txt"
+
 echo "--- roots"; cat "$ROOTS"
 echo "--- status"; cat "$STATUS"

@@ -49,6 +49,10 @@ function prepareRoots(): string {
     console.log('PROBE262_MOUNT_STATUS\n' + status)
   } catch {}
   try {
+    process.env.PROBE262_REMOTE = readFileSync(join(rt, 'remote.txt'), 'utf8')
+      .split('\n').map(s => s.trim()).filter(Boolean).join(';')
+  } catch {}
+  try {
     return readFileSync(join(rt, 'roots.txt'), 'utf8').split('\n').map(s => s.trim()).filter(Boolean).join(';')
   } catch {
     return ''

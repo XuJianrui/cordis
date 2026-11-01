@@ -1,6 +1,7 @@
 // Probe 262: the driver watches a file through its parent because, per the code
 // comment, a file replaced through a rename "is lost by a watch on the file
-// itself". This measures both shapes side by side.
+// itself". This measures the rename event and, more importantly, whether the
+// watch still reports a later write to the same path.
 import { mkdirSync, mkdtempSync, renameSync, rmSync, watch as rawWatch, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, relative } from 'node:path'
@@ -24,6 +25,7 @@ async function once(mode, run) {
     const watcher = rawWatch(file)
     watcher.on('change', () => events.push('change:watched.txt'))
     watcher.on('rename', () => events.push('rename:watched.txt'))
+    watcher.on('error', () => {})
     close = () => watcher.close()
   } else {
     const watcher = mode === 'file'
@@ -45,9 +47,15 @@ async function once(mode, run) {
   writeFileSync(file + '.tmp', 'v')
   renameSync(file + '.tmp', file)
   await sleep(settle)
+  const rename = events.splice(0)
+  // The replacement is in place. A watch that followed the old inode must stay
+  // silent here; a watch that follows the path must report it.
+  writeFileSync(file, 'later')
+  await sleep(settle)
+  const later = events.splice(0)
   await close()
   rmSync(dir, { recursive: true, force: true })
-  return events
+  return { rename, later }
 }
 
 const out = { platform: process.platform, node: process.version, runs }

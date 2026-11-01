@@ -44,5 +44,7 @@ $drive = $env:SystemDrive.TrimEnd(':')
 Add-Content $roots ('unc=\\localhost\' + $drive + '$\probe262-unc')
 Add-Content $status "unc=ok:$uncDir"
 
+Add-Content (Join-Path $rt 'remote.txt') "smb=$(Join-Path $base 'share')"
+
 Write-Output '--- roots'; Get-Content $roots
 Write-Output '--- status'; Get-Content $status

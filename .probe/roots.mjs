@@ -6,7 +6,7 @@
 // PROBE262_RUNS=3                          runs per cell
 import { mkdirSync, mkdtempSync, renameSync, rmSync, statfsSync, statSync, watch as rawWatch, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join, relative, resolve, sep } from 'node:path'
+import { basename, dirname, join, relative, resolve, sep } from 'node:path'
 import { watch } from 'chokidar'
 
 const runs = Number(process.env.PROBE262_RUNS || 3)
@@ -40,11 +40,14 @@ function fsType(path) {
 }
 
 function caseInsensitive(root) {
-  const probe = join(root, `case-${process.pid}-${Date.now()}.txt`)
+  // Two names that differ only in case, in the same directory. Lowercasing the
+  // whole path would also lowercase the (case-sensitive) parent directories.
+  const stamp = `${process.pid}-${Date.now()}`
+  const probe = join(root, `CaseProbe-${stamp}.txt`)
+  const folded = join(root, `caseprobe-${stamp}.txt`)
   writeFileSync(probe, 'x')
   try {
-    const found = statSync(probe.toLowerCase())
-    return found.isFile()
+    return statSync(folded).isFile()
   } catch {
     return false
   } finally {
@@ -98,6 +101,42 @@ async function rawWatchCase(root) {
   }
 }
 
+function remoteMap() {
+  const raw = process.env.PROBE262_REMOTE || ''
+  const map = {}
+  for (const item of raw.split(';').map(s => s.trim()).filter(Boolean)) {
+    const i = item.indexOf('=')
+    map[item.slice(0, i)] = item.slice(i + 1)
+  }
+  return map
+}
+
+/** Write through the backing directory, i.e. as another client would. */
+async function remoteWriteCase(rootPath, backing) {
+  const dir = join(rootPath, 'remote')
+  rmSync(dir, { recursive: true, force: true })
+  mkdirSync(dir, { recursive: true })
+  mkdirSync(join(backing, 'remote'), { recursive: true })
+  const events = []
+  let watcher
+  try {
+    watcher = watch(dir, { ignoreInitial: true })
+    watcher.on('all', (event, path) => events.push(`${event}:${relative(dir, path)}`))
+    watcher.on('error', (error) => events.push(`error:${error.code ?? error.message}`))
+    await new Promise(resolve => watcher.once('ready', resolve))
+    await sleep(150)
+    writeFileSync(join(backing, 'remote', 'from-server.txt'), 'x')
+    await sleep(settleMs)
+  } catch (error) {
+    events.push(`error:${error.code ?? error.message}`)
+  } finally {
+    await watcher?.close()
+  }
+  rmSync(dir, { recursive: true, force: true })
+  rmSync(join(backing, 'remote'), { recursive: true, force: true })
+  return events
+}
+
 const cells = [
   ['write', async (dir, file) => { writeFileSync(file, 'v') }],
   ['delete', async (dir, file) => { rmSync(file, { force: true }) }],
@@ -111,7 +150,9 @@ const cells = [
     renameSync(file + '.tmp', file)
   }],
   ['case-rename', async (dir, file) => {
-    const upper = file.toUpperCase()
+    // Only the basename changes case: on a case-sensitive filesystem the parent
+    // directories would otherwise not resolve.
+    const upper = join(dirname(file), basename(file).toUpperCase())
     if (upper === file) return
     try { renameSync(file, upper) } catch {}
   }],
@@ -175,6 +216,7 @@ async function grid(root) {
   return out
 }
 
+const remote = remoteMap()
 const report = []
 for (const root of parseRoots()) {
   let exists = true
@@ -194,6 +236,7 @@ for (const root of parseRoots()) {
     longPath: longPath(root.path),
     rawWatchEvents: await rawWatchCase(root.path),
     cells: await grid(root.path),
+    remoteWrite: remote[root.label] ? await remoteWriteCase(root.path, remote[root.label]) : null,
   }
   console.log('PROBE262_ROOT ' + JSON.stringify(entry))
   report.push(entry)
