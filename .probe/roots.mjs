@@ -196,7 +196,7 @@ async function grid(root) {
       const readings = []
       for (let run = 1; run <= runs; run++) {
         const dir = join(root, 'grid', shape, name, `run${run}`)
-        rmSync(dir, { recursive: true, force: true })
+        try { rmSync(dir, { recursive: true, force: true }) } catch {}
         mkdirSync(dir, { recursive: true })
         const file = join(dir, 'watched.txt')
         writeFileSync(file, 'seed')
@@ -236,7 +236,7 @@ async function grid(root) {
           await watcher?.close()
         }
         readings.push({ raw, cb, errors, post })
-        rmSync(dir, { recursive: true, force: true })
+        try { rmSync(dir, { recursive: true, force: true }) } catch {}
       }
       out[`${shape}:${name}`] = readings
     }

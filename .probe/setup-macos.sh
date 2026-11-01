@@ -47,21 +47,52 @@ for opts in \
 done
 [ "$mounted" = 1 ] || status nfs fail-mount
 
-# --- SMB via the built-in smbd: the other network path macOS ships -------------
+# --- SMB via the built-in smbd: diagnostics, guest, then a real local user -----
 mkdir -p "$BASE/smbshare" && chmod 777 "$BASE/smbshare"
 sudo launchctl load -w /System/Library/LaunchDaemons/com.apple.smbd.plist >/dev/null 2>&1 || true
 sudo defaults write /Library/Preferences/SystemConfiguration/com.apple.smb.server.plist EnabledServices -array disk >/dev/null 2>&1 || true
 sudo defaults write /Library/Preferences/SystemConfiguration/com.apple.smb.server.plist AllowGuestAccess -bool true >/dev/null 2>&1 || true
 sudo sharing -a "$BASE/smbshare" -S probe262 >/dev/null 2>&1 || true
 sudo launchctl kickstart -k system/com.apple.smbd >/dev/null 2>&1 || true
-sleep 2
+sleep 3
+{
+  echo "--- launchctl"; sudo launchctl list | grep -i smbd || true
+  echo "--- sharing"; sudo sharing -l || true
+  echo "--- view guest"; sudo smbutil view -N //localhost || true
+} > "$RT/smb-diag.txt" 2>&1 || true
+# A real account gives mount_smbfs something to authenticate as.
+sudo dscl . -passwd /Users/runner 'probe262pw' >/dev/null 2>&1 || true
 mkdir -p "$BASE/smb"
-if perl -e 'alarm 30; exec @ARGV' mount_smbfs -N "//guest@localhost/probe262" "$BASE/smb" 2>>"$STATUS"; then
-  add smb "$BASE/smb"
+smb_ok=0
+for target in \
+  "//guest@localhost/probe262" \
+  "//runner:probe262pw@localhost/probe262" \
+  "//localhost/probe262"; do
+  if perl -e 'alarm 25; exec @ARGV' mount_smbfs -N "$target" "$BASE/smb" 2>>"$STATUS"; then
+    add smb "$BASE/smb"
+    status smb-target "$target"
+    smb_ok=1
+    break
+  fi
+done
+[ "$smb_ok" = 1 ] || status smb fail-mount
+
+# --- WebDAV: a third network protocol, independent of smbd --------------------
+mkdir -p "$BASE/davshare"
+if perl -e 'alarm 180; exec @ARGV' python3 -m pip install --quiet --disable-pip-version-check wsgidav cheroot >/dev/null 2>&1; then
+  (cd "$BASE/davshare" && nohup python3 -m wsgidav.server.server_cli --host 127.0.0.1 --port 8765 --root "$BASE/davshare" >/dev/null 2>&1 &)
+  sleep 3
+  mkdir -p "$BASE/dav"
+  if perl -e 'alarm 30; exec @ARGV' mount_webdav "http://127.0.0.1:8765/" "$BASE/dav" 2>>"$STATUS"; then
+    add dav "$BASE/dav"
+  else
+    status dav fail-mount
+  fi
 else
-  status smb fail-mount
+  status dav fail-pip
 fi
 
 echo "--- nfs diag"; cat "$RT/nfs-diag.txt" 2>/dev/null || true
+echo "--- smb diag"; cat "$RT/smb-diag.txt" 2>/dev/null || true
 echo "--- roots"; cat "$ROOTS"
 echo "--- status"; cat "$STATUS"
