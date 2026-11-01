@@ -1,15 +1,48 @@
 /* eslint-disable */
 // Probe 262: the real driver (`ctx.fs.watch`) on non-default filesystems.
-// Reads PROBE262_ROOTS="label=path;label=path"; logs one JSON line per root.
+// Prepares the mounts itself (CI runners allow passwordless sudo / admin), then
+// logs one JSON line per root. PROBE262_ROOTS overrides the prepared list.
+import { execFileSync } from 'node:child_process'
 import { Context } from 'cordis'
-import { mkdirSync, renameSync, rmSync, writeFileSync } from 'node:fs'
-import { join } from 'node:path'
+import { mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { dirname, join, resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { it } from 'vitest'
 import Fs from '../src/index.ts'
 
 const runs = Number(process.env.PROBE262_RUNS || 3)
 const settle = Number(process.env.PROBE262_SETTLE_MS || 900)
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms))
+
+const root = resolve(dirname(fileURLToPath(import.meta.url)), '../../..')
+
+function prepareRoots(): string {
+  if (process.env.PROBE262_ROOTS) return process.env.PROBE262_ROOTS
+  const rt = process.env.RUNNER_TEMP || tmpdir()
+  const script = process.platform === 'win32'
+    ? '.probe/setup-windows.ps1'
+    : process.platform === 'darwin' ? '.probe/setup-macos.sh' : '.probe/setup-linux.sh'
+  try {
+    const command = process.platform === 'win32' ? 'powershell' : 'bash'
+    const args = process.platform === 'win32'
+      ? ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', resolve(root, script)]
+      : [resolve(root, script)]
+    const output = execFileSync(command, args, { encoding: 'utf8', timeout: 600_000 })
+    console.log('PROBE262_SETUP\n' + output)
+  } catch (error: any) {
+    console.log('PROBE262_SETUP_FAILED ' + (error?.message ?? error))
+  }
+  try {
+    const status = readFileSync(join(rt, 'mount-status.txt'), 'utf8')
+    console.log('PROBE262_MOUNT_STATUS\n' + status)
+  } catch {}
+  try {
+    return readFileSync(join(rt, 'roots.txt'), 'utf8').split('\n').map(s => s.trim()).filter(Boolean).join(';')
+  } catch {
+    return ''
+  }
+}
 
 function parseRoots() {
   const raw = process.env.PROBE262_ROOTS || ''
@@ -114,6 +147,18 @@ async function missingPath(base: string) {
 }
 
 it('probe 262: real driver on each root', async () => {
+  const roots = prepareRoots()
+  process.env.PROBE262_ROOTS = roots
+  try {
+    const output = execFileSync(process.execPath, [resolve(root, '.probe/roots.mjs')], {
+      encoding: 'utf8',
+      timeout: 900_000,
+      env: { ...process.env, PROBE262_ROOTS: roots },
+    })
+    console.log(output)
+  } catch (error: any) {
+    console.log('PROBE262_GRID_FAILED ' + (error?.message ?? error))
+  }
   for (const root of parseRoots()) {
     const result: any = { label: root.label, path: root.path, platform: process.platform, node: process.version, cells: {} }
     try {
