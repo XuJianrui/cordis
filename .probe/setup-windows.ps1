@@ -36,5 +36,11 @@ try {
   Add-Content $status "short=fail:$($_.Exception.Message)"
 }
 
+# The same volume reached through the administrative share: UNC without SMB server.
+$uncDir = Join-Path $env:SystemDrive 'probe262-unc'
+New-Item -ItemType Directory -Force -Path $uncDir | Out-Null
+Add-Content $roots "unc=\\localhost\$($env:SystemDrive.TrimEnd(':'))\$\probe262-unc"
+Add-Content $status "unc=ok:$uncDir"
+
 Write-Output '--- roots'; Get-Content $roots
 Write-Output '--- status'; Get-Content $status

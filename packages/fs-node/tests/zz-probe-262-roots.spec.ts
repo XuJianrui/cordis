@@ -11,6 +11,17 @@ import { fileURLToPath } from 'node:url'
 import { it } from 'vitest'
 import Fs from '../src/index.ts'
 
+const allWarnings: string[] = []
+
+function track(root: Context) {
+  root.logger.exporter({
+    export: (message: any) => {
+      if (message.type !== 'warn') return
+      allWarnings.push(message.args.map((arg: any) => String(arg?.message ?? arg)).join(' '))
+    },
+  })
+}
+
 const runs = Number(process.env.PROBE262_RUNS || 3)
 const settle = Number(process.env.PROBE262_SETTLE_MS || 900)
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms))
@@ -82,7 +93,7 @@ async function measure(base: string, shape: 'file' | 'dir', name: string, op: (d
     writeFileSync(file, 'seed')
     await sleep(200)
     const seen: string[] = []
-    const root = new Context()
+    const root = new Context(); track(root)
     const fiber = await root.plugin(Fs)
     try {
       const stop = await root.fs.watch(shape === 'file' ? file : dir, (filename) => { seen.push(filename) })
@@ -108,7 +119,7 @@ async function missingPath(base: string) {
     mkdirSync(dir, { recursive: true })
     const file = join(dir, 'later.txt')
     const seen: string[] = []
-    const root = new Context()
+    const root = new Context(); track(root)
     const fiber = await root.plugin(Fs)
     try {
       const stop = await root.fs.watch(file, (filename) => { seen.push(filename) })
@@ -128,7 +139,7 @@ async function missingPath(base: string) {
     mkdirSync(dir, { recursive: true })
     const target = join(dir, 'later')
     const seen: string[] = []
-    const root = new Context()
+    const root = new Context(); track(root)
     const fiber = await root.plugin(Fs)
     try {
       const stop = await root.fs.watch(target, (filename) => { seen.push(filename) })
@@ -143,6 +154,57 @@ async function missingPath(base: string) {
     out.asDir = seen.map(p => p.replace(dir, ''))
   }
   rmSync(join(base, 'driver', 'missing'), { recursive: true, force: true })
+  return out
+}
+
+async function shapeChanges(base: string) {
+  const out: any = {}
+  // a file that becomes a directory at the same path
+  {
+    const dir = join(base, 'driver', 'shapes', 'file-to-dir')
+    rmSync(dir, { recursive: true, force: true })
+    mkdirSync(dir, { recursive: true })
+    const target = join(dir, 'later')
+    writeFileSync(target, 'v')
+    const seen: string[] = []
+    const root = new Context(); track(root)
+    const fiber = await root.plugin(Fs)
+    try {
+      const stop = await root.fs.watch(target, (filename) => { seen.push(filename) })
+      await sleep(150)
+      rmSync(target, { force: true })
+      mkdirSync(target, { recursive: true })
+      writeFileSync(join(target, 'inside.txt'), 'v')
+      await sleep(settle)
+      await stop()
+    } finally {
+      await fiber.dispose()
+    }
+    out.fileToDir = seen.map(p => p.replace(dir, ''))
+  }
+  // a watched root that is deleted and recreated
+  {
+    const dir = join(base, 'driver', 'shapes', 'root-recreate')
+    rmSync(dir, { recursive: true, force: true })
+    mkdirSync(dir, { recursive: true })
+    const seen: string[] = []
+    const root = new Context(); track(root)
+    const fiber = await root.plugin(Fs)
+    try {
+      const stop = await root.fs.watch(dir, (filename) => { seen.push(filename) })
+      await sleep(150)
+      rmSync(dir, { recursive: true, force: true })
+      await sleep(200)
+      mkdirSync(dir, { recursive: true })
+      writeFileSync(join(dir, 'after.txt'), 'v')
+      await sleep(settle)
+      await stop()
+    } finally {
+      await fiber.dispose()
+    }
+    out.rootRecreate = seen.map(p => p.replace(dir, ''))
+  }
+  rmSync(join(base, 'driver', 'shapes'), { recursive: true, force: true })
   return out
 }
 
@@ -169,9 +231,11 @@ it('probe 262: real driver on each root', async () => {
         }
       }
       result.missing = await missingPath(root.path)
+      result.shapes = await shapeChanges(root.path)
+      result.warnings = allWarnings.splice(0)
     } catch (error: any) {
       result.error = error?.code ?? error?.message
     }
     console.log('PROBE262_DRIVER ' + JSON.stringify(result))
   }
-}, 600_000)
+}, 1_800_000)

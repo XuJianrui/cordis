@@ -42,7 +42,8 @@ if sudo apt-get install -y -qq sshfs openssh-server >/dev/null 2>&1; then
   chmod 600 "$HOME/.ssh/authorized_keys" "$HOME/.ssh/id_ed25519" 2>/dev/null
   ssh-keyscan -H localhost >> "$HOME/.ssh/known_hosts" 2>/dev/null || true
   mkdir -p "$BASE/sshfs"
-  if sshfs -o idmap=user,StrictHostKeyChecking=no,reconnect "localhost:$BASE/sshshare" "$BASE/sshfs" 2>>"$STATUS"; then
+  if timeout 60 sshfs -o idmap=user,StrictHostKeyChecking=no,BatchMode=yes,ConnectTimeout=10,reconnect \
+    "localhost:$BASE/sshshare" "$BASE/sshfs" 2>>"$STATUS"; then
     add sshfs "$BASE/sshfs"
   else
     status sshfs fail-mount
@@ -58,7 +59,8 @@ if sudo apt-get install -y -qq nfs-kernel-server nfs-common >/dev/null 2>&1; the
   sudo exportfs -ra >/dev/null 2>&1 || true
   sudo systemctl restart nfs-kernel-server >/dev/null 2>&1 || sudo service nfs-kernel-server restart >/dev/null 2>&1 || true
   mkdir -p "$BASE/nfs"
-  if sudo mount -t nfs -o vers=4,addr=127.0.0.1 "localhost:$BASE/nfsshare" "$BASE/nfs" 2>>"$STATUS"; then
+  if timeout 45 sudo mount -t nfs -o vers=4,addr=127.0.0.1,soft,timeo=50,retrans=1 \
+    "localhost:$BASE/nfsshare" "$BASE/nfs" 2>>"$STATUS"; then
     add nfs "$BASE/nfs"
   else
     status nfs fail-mount

@@ -79,15 +79,17 @@ async function rawWatchCase(root) {
   rmSync(dir, { recursive: true, force: true })
   mkdirSync(dir, { recursive: true })
   let count = 0
+  let failure
   let watcher
   try {
     watcher = rawWatch(dir)
     watcher.on('change', () => count++)
     watcher.on('rename', () => count++)
+    watcher.on('error', (error) => { failure = `error:${error.code ?? error.message}` })
     await sleep(300)
     writeFileSync(join(dir, 'a.txt'), 'x')
     await sleep(settleMs)
-    return count
+    return failure ?? count
   } catch (error) {
     return `error:${error.code ?? error.message}`
   } finally {
@@ -134,6 +136,7 @@ async function grid(root) {
         await sleep(300)
         const raw = []
         const cb = []
+        const errors = []
         const isFile = shape === 'file'
         let watcher
         try {
@@ -146,6 +149,7 @@ async function grid(root) {
               return false
             },
           })
+          watcher.on('error', (error) => errors.push(`error:${error.code ?? error.message}`))
           watcher.on('all', (event, path) => raw.push(`${event}:${relative(dir, path).split(sep).join('/')}`))
           watcher.on('add', (path) => {
             if (!isFile || resolve(path) === resolve(file)) cb.push(`add:${relative(dir, path).split(sep).join('/')}`)
@@ -162,7 +166,7 @@ async function grid(root) {
         } finally {
           await watcher?.close()
         }
-        readings.push({ raw, cb })
+        readings.push({ raw, cb, errors })
         rmSync(dir, { recursive: true, force: true })
       }
       out[`${shape}:${name}`] = readings
