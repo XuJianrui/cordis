@@ -141,11 +141,11 @@ async function remoteWriteCase(rootPath, backing) {
 const cells = [
   ['write', async (dir, file) => { writeFileSync(file, 'v') }],
   ['delete', async (dir, file) => { rmSync(file, { force: true }) }],
-  ['recreate-200', async (dir, file) => {
+  ...['0', '20', '200'].map(ms => [`recreate-${ms}`, async (dir, file) => {
     rmSync(file, { force: true })
-    await sleep(200)
+    await sleep(Number(ms))
     writeFileSync(file, 'v')
-  }],
+  }]),
   ['atomic-rename', async (dir, file) => {
     writeFileSync(file + '.tmp', 'v')
     renameSync(file + '.tmp', file)
