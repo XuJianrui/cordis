@@ -104,7 +104,7 @@ elif perl -e 'alarm 180; exec @ARGV' pip3 install --user --break-system-packages
 fi
 if [ -n "$dav_pip" ]; then
   status dav-pip "$dav_pip"
-  (cd "$BASE/davshare" && nohup python3 -m wsgidav.server.server_cli --host 127.0.0.1 --port 8765 --root "$BASE/davshare" > "$RT/dav-server.log" 2>&1 &)
+  (cd "$BASE/davshare" && nohup python3 -m wsgidav.server.server_cli --host 127.0.0.1 --port 8765 --root "$BASE/davshare" --auth anonymous > "$RT/dav-server.log" 2>&1 &)
   sleep 3
   status dav-http "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8765/ 2>&1 || true)"
   mkdir -p "$BASE/dav"
