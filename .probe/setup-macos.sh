@@ -60,6 +60,8 @@ if command -v brew >/dev/null 2>&1; then
   workgroup = WORKGROUP
   server role = standalone server
   server min protocol = SMB2
+  interfaces = lo0
+  bind interfaces only = yes
   map to guest = bad user
   guest account = nobody
   pid directory = $BASE/smb-run
@@ -166,6 +168,8 @@ else
   status dav fail-pip
 fi
 
+echo "--- smb brew diag"; cat "$RT/smb-brew-diag.txt" 2>/dev/null || true
+echo "--- brew log"; tail -20 "$RT/brew-samba.log" 2>/dev/null || true
 echo "--- nfs diag"; cat "$RT/nfs-diag.txt" 2>/dev/null || true
 echo "--- smb diag"; cat "$RT/smb-diag.txt" 2>/dev/null || true
 echo "--- roots"; cat "$ROOTS"
