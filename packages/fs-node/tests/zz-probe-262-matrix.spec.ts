@@ -36,9 +36,12 @@ import Fs from '../src/index.ts'
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
 const SETTLE = Number(process.env.PROBE262_SETTLE || 900)
 const projectRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../../..')
-// Watch errors seen by the naive arm, reported rather than thrown: a root that
-// cannot be watched is a reading, not a probe failure.
-const WATCH_ERRORS: string[] = []
+// Watch errors seen by the two probe arms, reported rather than thrown: a root
+// that cannot be watched (SMB, UNC) is a reading, not a probe failure. Cleared
+// per arm so one arm's errors cannot be attributed to the next. The shipped arm
+// does not fill this -- it downgrades the same error to a logger warning
+// (packages/fs-node/src/index.ts:64-66) and has no hook to record it.
+let WATCH_ERRORS: string[] = []
 
 // --- implementations under test ------------------------------------------------
 
@@ -59,6 +62,12 @@ class PlusUnlink extends Service {
         },
       })
       const listener = async (p: string) => { try { await callback(resolve(p)) } catch {} }
+      // The shipped driver subscribes to 'error' and downgrades it to a warning
+      // (packages/fs-node/src/index.ts:64-66). An arm that adds the proposed
+      // unlink line must not also drop that subscription, or it differs from the
+      // product by two lines instead of one -- and on a root that cannot be
+      // watched (SMB, UNC) the missing listener is 24 unhandled rejections.
+      watcher.on('error', (error: any) => { WATCH_ERRORS.push(String(error?.code ?? error?.message)) })
       watcher.on('add', listener)
       watcher.on('change', listener)
       watcher.on('unlink', async (p: string) => { try { await callback(resolve(p)) } catch {} })
@@ -201,6 +210,7 @@ it('probe 262 d1/d2: three implementations on every mounted root', async () => {
   for (const r of roots) {
     const fstype = fsTypeOf(r.path)
     for (const [impl, load] of impls) {
+      WATCH_ERRORS = []
       const res = await d1DeleteOnRoot(r.label, r.path, load, impl)
       console.log('PROBE262_ROOTIMPL ' + JSON.stringify({
         platform: process.platform, node: process.version, settle: SETTLE,
