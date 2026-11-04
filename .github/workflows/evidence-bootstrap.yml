@@ -7,6 +7,7 @@ on:
     paths:
       - '.github/workflows/evidence-bootstrap.yml'
       - 'scripts/bootstrap_analysis.py'
+      - 'scripts/fetch_job_logs.py'
 
 concurrency:
   group: evidence-bootstrap-${{ github.ref }}
@@ -40,51 +41,13 @@ jobs:
       - name: Download 30 run job logs
         id: download
         env:
-          GH_TOKEN: ${{ secrets.EVIDENCE_PAT }}
+          GH_TOKEN: ${{ github.token }}
         run: |
-          python3 - <<'PY'
-          import os, json, sys, time, gzip
-          from pathlib import Path
-
-          GH_TOKEN = os.environ['GH_TOKEN']
-          REPO = "XuJianrui/cordis"
-          RUN_IDS = [
-            41319092304, 41351782962, 41401117722, 41435898951, 41445271315,
-            41445289431, 41446144427, 41446196426, 41448886215, 41560142581,
-            41572883676, 41736747356, 41737956074, 41746559054, 41753424524,
-            41753599923, 41753701139, 41754609497, 41756237186
-          ]
-
-          headers = {"Authorization": f"Bearer {GH_TOKEN}", "Accept": "application/vnd.github+json"}
-          log_dir = Path("evidence/statistical/raw_logs")
-          log_dir.mkdir(parents=True, exist_ok=True)
-
-          import urllib.request
-          def fetch(url):
-              req = urllib.request.Request(url, headers=headers)
-              with urllib.request.urlopen(req, timeout=60) as r:
-                  return r.read()
-
-          success = 0
-          for rid in RUN_IDS:
-              try:
-                  jobs_url = f"https://api.github.com/repos/{REPO}/actions/runs/{rid}/jobs?per_page=100"
-                  jobs_data = json.loads(fetch(jobs_url))
-                  for job in jobs_data.get("jobs", []):
-                      if job.get("conclusion") in ("success", "failure"):
-                          log_url = f"https://api.github.com/repos/{REPO}/actions/jobs/{job['id']}/logs"
-                          log_content = fetch(log_url)
-                          out_file = log_dir / f"{rid}_{job['id']}.log.gz"
-                          with gzip.open(out_file, 'wb') as f:
-                              f.write(log_content)
-                          print(f"  saved {out_file} ({len(log_content)} bytes)")
-                          success += 1
-              except Exception as e:
-                  print(f"  RUN {rid} ERROR: {e}", file=sys.stderr)
-              time.sleep(0.3)
-
-          print(f"Downloaded logs for {success} jobs from {len(RUN_IDS)} runs")
-          PY
+          set -euo pipefail
+          python3 scripts/fetch_job_logs.py \
+            --repo "${{ github.repository }}" \
+            --out evidence/statistical/raw_logs \
+            --runs "41319092304,41351782962,41401117722,41435898951,41445271315,41445289431,41446144427,41446196426,41448886215,41560142581,41572883676,41736747356,41737956074,41746559054,41753424524,41753599923,41753701139,41754609497,41756237186"
 
       - name: Bootstrap analysis (10k resamples)
         id: analyze
