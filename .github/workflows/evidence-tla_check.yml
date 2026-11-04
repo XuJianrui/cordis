@@ -71,7 +71,7 @@ jobs:
           cases = {}
           cur = None
           for line in txt.splitlines():
-              m = re.match(r"CASE (\S+)\s+\(expect: (\w+)\)", line.strip())
+              m = re.match(r"CASE\s+(\S+).*?\(expect:\s*(\w+)\)", line.strip())
               if m:
                   cur = m.group(1)
                   cases[cur] = {"expected": m.group(2)}
@@ -80,6 +80,9 @@ jobs:
                   m2 = re.search(r"verdict: (\w+)", line)
                   if m2:
                       cases[cur]["verdict"] = m2.group(1)
+                  m3 = re.search(r"Invariant (\w+) is violated", line)
+                  if m3:
+                      cases[cur]["violated_invariant"] = m3.group(1)
                   if "RESULT: PASS" in line:
                       cases[cur]["result"] = "PASS"
                   if "RESULT: FAIL" in line:
