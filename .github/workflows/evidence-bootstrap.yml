@@ -5,7 +5,7 @@ on:
   push:
     branches: [probe-262-rebuild]
     paths:
-      - '.github/workflows/evidence/bootstrap.yml'
+      - '.github/workflows/evidence-bootstrap.yml'
       - 'scripts/bootstrap_analysis.py'
 
 concurrency:
@@ -35,14 +35,15 @@ jobs:
       - name: Install deps
         run: |
           pip install -q scipy numpy pandas tqdm requests
+          pip list | grep -E "scipy|numpy|pandas|tqdm|requests"
 
       - name: Download 30 run job logs
         id: download
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ secrets.EVIDENCE_PAT }}
         run: |
           python3 - <<'PY'
-          import os, json, subprocess, sys, time, gzip
+          import os, json, sys, time, gzip
           from pathlib import Path
 
           GH_TOKEN = os.environ['GH_TOKEN']
@@ -53,7 +54,6 @@ jobs:
             41572883676, 41736747356, 41737956074, 41746559054, 41753424524,
             41753599923, 41753701139, 41754609497, 41756237186
           ]
-          # Note: only 19 unique from comments, but we fetch all cited
 
           headers = {"Authorization": f"Bearer {GH_TOKEN}", "Accept": "application/vnd.github+json"}
           log_dir = Path("evidence/statistical/raw_logs")
@@ -65,30 +65,33 @@ jobs:
               with urllib.request.urlopen(req, timeout=60) as r:
                   return r.read()
 
+          success = 0
           for rid in RUN_IDS:
               try:
-                  # Get jobs for this run
                   jobs_url = f"https://api.github.com/repos/{REPO}/actions/runs/{rid}/jobs?per_page=100"
                   jobs_data = json.loads(fetch(jobs_url))
                   for job in jobs_data.get("jobs", []):
                       if job.get("conclusion") in ("success", "failure"):
                           log_url = f"https://api.github.com/repos/{REPO}/actions/jobs/{job['id']}/logs"
                           log_content = fetch(log_url)
-                          # Save gzipped
                           out_file = log_dir / f"{rid}_{job['id']}.log.gz"
                           with gzip.open(out_file, 'wb') as f:
                               f.write(log_content)
                           print(f"  saved {out_file} ({len(log_content)} bytes)")
+                          success += 1
               except Exception as e:
                   print(f"  RUN {rid} ERROR: {e}", file=sys.stderr)
-              time.sleep(0.3)  # rate limit courtesy
+              time.sleep(0.3)
 
-          print(f"Downloaded logs for {len(RUN_IDS)} runs")
+          print(f"Downloaded logs for {success} jobs from {len(RUN_IDS)} runs")
           PY
 
       - name: Bootstrap analysis (10k resamples)
         id: analyze
         run: |
+          set -euo pipefail
+          echo "Input directory contents:"
+          ls -la evidence/statistical/raw_logs/ || echo "empty"
           python3 scripts/bootstrap_analysis.py \
             --input-dir evidence/statistical/raw_logs \
             --output-dir evidence/statistical \

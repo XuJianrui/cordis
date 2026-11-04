@@ -6,7 +6,7 @@ on:
     branches: [probe-262-rebuild]
     paths:
       - 'verify/spec/ctxfs.tla'
-      - '.github/workflows/evidence/tla_check.yml'
+      - '.github/workflows/evidence-tla_check.yml'
 
 concurrency:
   group: evidence-tla-${{ github.ref }}
@@ -19,6 +19,9 @@ jobs:
     timeout-minutes: 60
     # 仅在 fork 仓库运行，防止误触发上游
     if: github.repository_owner == 'XuJianrui'
+    permissions:
+      contents: write
+      actions: read
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -32,22 +35,29 @@ jobs:
       - name: Download Apalache
         id: apalache
         run: |
+          set -euo pipefail
           VERSION="0.28.0"
           URL="https://github.com/informalsystems/apalache/releases/download/v${VERSION}/apalache-${VERSION}-linux.tar.gz"
-          curl -LfsS "$URL" -o /tmp/apalache.tgz
+          echo "Downloading Apalache from $URL"
+          curl -LfsS "$URL" -o /tmp/apalache.tgz || { echo "Download failed"; exit 1; }
           tar -xzf /tmp/apalache.tgz -C /tmp
+          ls -la /tmp/apalache-${VERSION}/bin/
           echo "APALACHE=/tmp/apalache-${VERSION}/bin/apalache" >> $GITHUB_OUTPUT
 
       - name: Run Apalache (NeverStale invariant, bounded 30 steps)
         id: check
         run: |
           set -euo pipefail
+          echo "Apalache version:"
+          ${{ steps.apalache.outputs.APALACHE }} --version
+          echo "Running model check..."
           ${{ steps.apalache.outputs.APALACHE }} check \
             --inv=NeverStale \
             --max-steps=30 \
             --length=10 \
             --config-file=/dev/null \
             verify/spec/ctxfs.tla 2>&1 | tee apalache_output.txt
+          echo "Exit code: ${PIPESTATUS[0]}"
 
       - name: Extract results
         id: extract
@@ -71,6 +81,8 @@ jobs:
 
       - name: Commit results to evidence/tla_results/
         if: always()
+        env:
+          GH_TOKEN: ${{ secrets.EVIDENCE_PAT }}
         run: |
           set -euo pipefail
           mkdir -p evidence/tla_results
@@ -88,6 +100,12 @@ jobs:
           }
           EOF
           cat evidence/tla_results/run_${{ github.run_id }}.json
+          # Push results back to fork
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add evidence/tla_results/
+          git commit -m "ci(evidence): tla results from run ${{ github.run_id }}" || echo "No changes"
+          git push || echo "Push failed (may be concurrent)"
 
       - name: Summary
         run: |
