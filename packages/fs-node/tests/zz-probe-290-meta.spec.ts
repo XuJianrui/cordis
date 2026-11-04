@@ -26,8 +26,8 @@ import { dirname, join, resolve } from 'node:path'
 import { Context, Fiber } from 'cordis'
 import Fs from '../src/index.ts'
 
-const ROUNDS = 15
-const BLOCKS = 3
+const ROUNDS = 6
+const BLOCKS = 8
 
 type Variant = 'deep' | 'flat' | 'warm' | 'cold'
 
@@ -67,8 +67,15 @@ describe('290 measure the measurement', () => {
     let warmFiber: Fiber<Context> | null = null
     const out: Record<string, string[]> = { deep: [], flat: [], warm: [], cold: [] }
 
+    // Rotate which variant goes first. In the previous run `deep` was always
+    // position 1 and always won; a fixed order cannot tell "depth helps" from
+    // "going first helps", and the second is easy to produce - the first arm of a
+    // block runs against a process that has done less work, with fewer handles
+    // open and a colder GC. Six blocks cover each variant at each position.
     for (let b = 0; b < BLOCKS; b++) {
-      for (const v of ['deep', 'flat', 'warm', 'cold'] as Variant[]) {
+      const order = ['deep', 'flat', 'warm', 'cold'] as Variant[]
+      const rotated = [...order.slice(b % 4), ...order.slice(0, b % 4)]
+      for (const v of rotated) {
         let pass = 0
         let timeout = 0
         for (let i = 0; i < ROUNDS; i++) {
@@ -97,6 +104,6 @@ describe('290 measure the measurement', () => {
       }
     }
     if (warmFiber) await (warmFiber as Fiber<Context>).dispose()
-    console.log('PROBE_290_META =', JSON.stringify({ platform: process.platform, out }))
-  }, 900_000)
+    console.log('PROBE_290_META =', JSON.stringify({ platform: process.platform, blocks: BLOCKS, out }))
+  }, 880_000)
 })
