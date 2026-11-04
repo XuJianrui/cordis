@@ -26,6 +26,11 @@ import { expect } from 'vitest'
 
 const PROBE = /[\\/]zz-(?:probe|verify)-262[^\\/]*\.spec\.ts$/
 
+// Proof that the gate ran. Without this line an empty PROBE_SOFT_FAIL count is
+// ambiguous: it can mean "no expectation failed" or "the setup never loaded".
+// A ledger with no entries is a ledger that did not run.
+console.log('PROBE_SETUP_LOADED = 1')
+
 const isProbe = (): boolean => {
   try {
     return PROBE.test(expect.getState().testPath ?? '')
