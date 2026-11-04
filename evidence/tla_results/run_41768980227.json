@@ -1,0 +1,13 @@
+{
+  "run_id": "41768980227",
+  "sha": "cc236ce0b7971d87d152ac05ccb4d76f92089e53",
+  "timestamp": "2026-11-04T03:44:51Z",
+  "tool": "tlc",
+  "bounds": {
+    "MaxPending": 3,
+    "MaxWrites": 3
+  },
+  "cases": {},
+  "summary": "TLC: all 3 cases matched their expected outcome",
+  "all_matched": true
+}
