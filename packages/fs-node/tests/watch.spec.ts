@@ -316,6 +316,24 @@ describe('Fs', () => {
       await touch(target, () => seen.length)
       expect([...new Set(seen)]).to.deep.equal([resolve(link, 'file.ts')])
     }, 15000)
+    // The same case repeated in place, so the rate is measured on the real
+    // fixture rather than on a probe that only resembles it.
+    for (let index = 0; index < 40; index++) {
+      it(`relinks a file at index ${index}`, async () => {
+        const target = write(`relinked/n${index}/target/file.ts`)
+        const link = write(`relinked/n${index}/root/linked`)
+        const ctx = await setup()
+        const seen: string[] = []
+        await watch(ctx, dirname(link), (filename) => { seen.push(filename) }, {
+          filter: ['linked/**/*.ts'],
+        })
+
+        rmSync(link)
+        symlinkSync(dirname(target), link, 'junction')
+        await touch(target, () => seen.length)
+        expect([...new Set(seen)]).to.deep.equal([resolve(link, 'file.ts')])
+      }, 15000)
+    }
 
     it('keeps no entry with an empty `filter`', async () => {
       const path = write('empty/file.txt')
