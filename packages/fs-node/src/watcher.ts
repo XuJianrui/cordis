@@ -133,6 +133,13 @@ export class Watcher {
       })
       watcher.on('error', error => this._error(error))
       watcher.on('change', path => this._emit('change', resolve(path)))
+      // chokidar collapses a remove-and-recreate inside its 100 ms `atomic`
+      // window into `change`, and otherwise reports `unlink` then `add`. An
+      // entry recreated that way is a change to this service's callers.
+      watcher.on('add', path => {
+        if (path === root) return
+        this._emit('change', resolve(path))
+      })
       await new Promise<void>(resolve => watcher.once('ready', () => resolve()))
       this._ready = true
       this._emit('ready')
