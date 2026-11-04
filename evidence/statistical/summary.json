@@ -1,0 +1,1044 @@
+{
+  "metadata": {
+    "log_files": 131,
+    "logs_with_readings": 58,
+    "per_job_layer_rows": 30,
+    "numeric_fields": 43,
+    "bootstrap_resamples": 10000,
+    "confidence_level": 0.95,
+    "correction_method": "Holm-Bonferroni (ratios only)",
+    "note": "Counters are counts, not proportions: Wilson intervals do not apply. Ratios are per job (last ADJ_LAYER row), so n = number of jobs, not writes."
+  },
+  "readings": {
+    "ADJ_ABORT_CONTROL_MS": {
+      "count": 28,
+      "mean": 40.07142857142857,
+      "std": 18.8854805515077,
+      "median": 39.5,
+      "min": 20.0,
+      "max": 118.0,
+      "bootstrap_ci": {
+        "n": 28,
+        "mean": 40.07142857142857,
+        "ci_low": 35.142857142857146,
+        "ci_high": 50.947302747767736,
+        "method": "bca"
+      }
+    },
+    "ADJ_ABORT_TRIAL_0.ms": {
+      "count": 28,
+      "mean": 4.321428571428571,
+      "std": 2.6812596739505556,
+      "median": 4.0,
+      "min": 1.0,
+      "max": 11.0,
+      "bootstrap_ci": {
+        "n": 28,
+        "mean": 4.321428571428571,
+        "ci_low": 3.4285714285714284,
+        "ci_high": 5.392857142857143,
+        "method": "bca"
+      }
+    },
+    "ADJ_ABORT_TRIAL_1.ms": {
+      "count": 28,
+      "mean": 2.9285714285714284,
+      "std": 1.9612651137877424,
+      "median": 2.0,
+      "min": 1.0,
+      "max": 8.0,
+      "bootstrap_ci": {
+        "n": 28,
+        "mean": 2.9285714285714284,
+        "ci_low": 2.3214285714285716,
+        "ci_high": 3.7857142857142856,
+        "method": "bca"
+      }
+    },
+    "ADJ_ABORT_TRIAL_2.ms": {
+      "count": 28,
+      "mean": 3.5714285714285716,
+      "std": 2.4408342749297747,
+      "median": 3.0,
+      "min": 0.0,
+      "max": 9.0,
+      "bootstrap_ci": {
+        "n": 28,
+        "mean": 3.5714285714285716,
+        "ci_low": 2.75,
+        "ci_high": 4.535714285714286,
+        "method": "bca"
+      }
+    },
+    "ADJ_ABORT_TRIAL_3.ms": {
+      "count": 28,
+      "mean": 2.857142857142857,
+      "std": 2.519763153394848,
+      "median": 2.0,
+      "min": 0.0,
+      "max": 11.0,
+      "bootstrap_ci": {
+        "n": 28,
+        "mean": 2.857142857142857,
+        "ci_low": 2.107142857142857,
+        "ci_high": 4.035714285714286,
+        "method": "bca"
+      }
+    },
+    "ADJ_ABORT_TRIAL_4.ms": {
+      "count": 28,
+      "mean": 3.2857142857142856,
+      "std": 2.1748928088893784,
+      "median": 3.0,
+      "min": 1.0,
+      "max": 9.0,
+      "bootstrap_ci": {
+        "n": 28,
+        "mean": 3.2857142857142856,
+        "ci_low": 2.5714285714285716,
+        "ci_high": 4.178571428571429,
+        "method": "bca"
+      }
+    },
+    "ADJ_ITER_AFTER_STOP_CALLBACKS": {
+      "count": 5,
+      "mean": 0.0,
+      "std": 0.0,
+      "median": 0.0,
+      "min": 0.0,
+      "max": 0.0,
+      "bootstrap_ci": {
+        "n": 5,
+        "mean": 0.0,
+        "ci_low": 0.0,
+        "ci_high": 0.0,
+        "method": "degenerate-zero-variance"
+      }
+    },
+    "ADJ_ITER_READY_MS": {
+      "count": 28,
+      "mean": 6.392857142857143,
+      "std": 2.3779743280283547,
+      "median": 6.5,
+      "min": 3.0,
+      "max": 13.0,
+      "bootstrap_ci": {
+        "n": 28,
+        "mean": 6.392857142857143,
+        "ci_low": 5.642857142857143,
+        "ci_high": 7.392857142857143,
+        "method": "bca"
+      }
+    },
+    "ADJ_ITER_STATS.afterStopCallbacks": {
+      "count": 5,
+      "mean": 0.0,
+      "std": 0.0,
+      "median": 0.0,
+      "min": 0.0,
+      "max": 0.0,
+      "bootstrap_ci": {
+        "n": 5,
+        "mean": 0.0,
+        "ci_low": 0.0,
+        "ci_high": 0.0,
+        "method": "degenerate-zero-variance"
+      }
+    },
+    "ADJ_ITER_STATS.rawCallbacks": {
+      "count": 5,
+      "mean": 0.2,
+      "std": 0.447213595499958,
+      "median": 0.0,
+      "min": 0.0,
+      "max": 1.0,
+      "bootstrap_ci": {
+        "n": 5,
+        "mean": 0.2,
+        "ci_low": 0.0,
+        "ci_high": 0.8,
+        "method": "bca"
+      }
+    },
+    "ADJ_ITER_WRITE.i": {
+      "count": 1757,
+      "mean": 48.32441661923734,
+      "std": 28.216833318650053,
+      "median": 48.0,
+      "min": 0.0,
+      "max": 99.0,
+      "bootstrap_ci": {
+        "n": 1757,
+        "mean": 48.32441661923734,
+        "ci_low": 47.002589895722615,
+        "ci_high": 49.66673508885851,
+        "method": "bca"
+      }
+    },
+    "ADJ_ITER_WRITE.ms": {
+      "count": 1757,
+      "mean": 2.5128059191804213,
+      "std": 17.493717744276413,
+      "median": 1.0,
+      "min": 0.0,
+      "max": 679.0,
+      "bootstrap_ci": {
+        "n": 1757,
+        "mean": 2.5128059191804213,
+        "ci_low": 2.020918032926626,
+        "ci_high": 4.223607508123715,
+        "method": "bca"
+      }
+    },
+    "ADJ_LAYER.L0_fileRaw": {
+      "count": 900,
+      "mean": 28.95777777777778,
+      "std": 17.08522104476732,
+      "median": 28.0,
+      "min": 1.0,
+      "max": 61.0,
+      "bootstrap_ci": {
+        "n": 900,
+        "mean": 28.95777777777778,
+        "ci_low": 27.83155589395748,
+        "ci_high": 30.04,
+        "method": "bca"
+      }
+    },
+    "ADJ_LAYER.L1_dirRaw": {
+      "count": 900,
+      "mean": 26.33222222222222,
+      "std": 16.44553709287547,
+      "median": 24.0,
+      "min": 2.0,
+      "max": 61.0,
+      "bootstrap_ci": {
+        "n": 900,
+        "mean": 26.33222222222222,
+        "ci_low": 25.26987591995288,
+        "ci_high": 27.4284209922097,
+        "method": "bca"
+      }
+    },
+    "ADJ_LAYER.L2_chokidar": {
+      "count": 900,
+      "mean": 15.615555555555556,
+      "std": 8.680523134780639,
+      "median": 16.0,
+      "min": 1.0,
+      "max": 31.0,
+      "bootstrap_ci": {
+        "n": 900,
+        "mean": 15.615555555555556,
+        "ci_low": 15.058614291083172,
+        "ci_high": 16.176666666666666,
+        "method": "bca"
+      }
+    },
+    "ADJ_LAYER.L3_ctxfs": {
+      "count": 900,
+      "mean": 15.615555555555556,
+      "std": 8.680523134780639,
+      "median": 16.0,
+      "min": 1.0,
+      "max": 31.0,
+      "bootstrap_ci": {
+        "n": 900,
+        "mean": 15.615555555555556,
+        "ci_low": 15.05363386148002,
+        "ci_high": 16.18111111111111,
+        "method": "bca"
+      }
+    },
+    "ADJ_LAYER.i": {
+      "count": 900,
+      "mean": 15.5,
+      "std": 8.660254037844387,
+      "median": 15.5,
+      "min": 1.0,
+      "max": 30.0,
+      "bootstrap_ci": {
+        "n": 900,
+        "mean": 15.5,
+        "ci_low": 14.944444444444445,
+        "ci_high": 16.07111111111111,
+        "method": "bca"
+      }
+    },
+    "ADJ_LAYER.writes": {
+      "count": 900,
+      "mean": 15.5,
+      "std": 8.660254037844387,
+      "median": 15.5,
+      "min": 1.0,
+      "max": 30.0,
+      "bootstrap_ci": {
+        "n": 900,
+        "mean": 15.5,
+        "ci_low": 14.935555555555556,
+        "ci_high": 16.06483345507284,
+        "method": "bca"
+      }
+    },
+    "ADJ_N6_EVENTS": {
+      "count": 40,
+      "mean": 1.0,
+      "std": 0.0,
+      "median": 1.0,
+      "min": 1.0,
+      "max": 1.0,
+      "bootstrap_ci": {
+        "n": 40,
+        "mean": 1.0,
+        "ci_low": 1.0,
+        "ci_high": 1.0,
+        "method": "degenerate-zero-variance"
+      }
+    },
+    "ADJ_N6_KEYS_INDEX": {
+      "count": 40,
+      "mean": 1.0,
+      "std": 0.0,
+      "median": 1.0,
+      "min": 1.0,
+      "max": 1.0,
+      "bootstrap_ci": {
+        "n": 40,
+        "mean": 1.0,
+        "ci_low": 1.0,
+        "ci_high": 1.0,
+        "method": "degenerate-zero-variance"
+      }
+    },
+    "ADJ_N6_KEYS_META": {
+      "count": 40,
+      "mean": 1.0,
+      "std": 0.0,
+      "median": 1.0,
+      "min": 1.0,
+      "max": 1.0,
+      "bootstrap_ci": {
+        "n": 40,
+        "mean": 1.0,
+        "ci_low": 1.0,
+        "ci_high": 1.0,
+        "method": "degenerate-zero-variance"
+      }
+    },
+    "ADJ_N6_KEYS_WINDOW100": {
+      "count": 40,
+      "mean": 1.0,
+      "std": 0.0,
+      "median": 1.0,
+      "min": 1.0,
+      "max": 1.0,
+      "bootstrap_ci": {
+        "n": 40,
+        "mean": 1.0,
+        "ci_low": 1.0,
+        "ci_high": 1.0,
+        "method": "degenerate-zero-variance"
+      }
+    },
+    "ADJ_N6_META.__len": {
+      "count": 40,
+      "mean": 1.0,
+      "std": 0.0,
+      "median": 1.0,
+      "min": 1.0,
+      "max": 1.0,
+      "bootstrap_ci": {
+        "n": 40,
+        "mean": 1.0,
+        "ci_low": 1.0,
+        "ci_high": 1.0,
+        "method": "degenerate-zero-variance"
+      }
+    },
+    "ADJ_N6_META.mtimeMs": {
+      "count": 40,
+      "mean": 1793753333334.6023,
+      "std": 3553090.555657305,
+      "median": 1793755420450.9346,
+      "min": 1793747434538.4133,
+      "max": 1793756889280.7866,
+      "bootstrap_ci": {
+        "n": 40,
+        "mean": 1793753333334.6023,
+        "ci_low": 1793752141007.965,
+        "ci_high": 1793754323229.5903,
+        "method": "bca"
+      }
+    },
+    "ADJ_N6_META.size": {
+      "count": 40,
+      "mean": 2.0,
+      "std": 0.0,
+      "median": 2.0,
+      "min": 2.0,
+      "max": 2.0,
+      "bootstrap_ci": {
+        "n": 40,
+        "mean": 2.0,
+        "ci_low": 2.0,
+        "ci_high": 2.0,
+        "method": "degenerate-zero-variance"
+      }
+    },
+    "ADJ_N6_META.t": {
+      "count": 40,
+      "mean": 1793753333338.675,
+      "std": 3553091.992775728,
+      "median": 1793755420454.0,
+      "min": 1793747434540.0,
+      "max": 1793756889282.0,
+      "bootstrap_ci": {
+        "n": 40,
+        "mean": 1793753333338.675,
+        "ci_low": 1793752125106.7048,
+        "ci_high": 1793754349007.0967,
+        "method": "bca"
+      }
+    },
+    "ADJ_N6_SEEDS.counts.__len": {
+      "count": 40,
+      "mean": 60.0,
+      "std": 0.0,
+      "median": 60.0,
+      "min": 60.0,
+      "max": 60.0,
+      "bootstrap_ci": {
+        "n": 40,
+        "mean": 60.0,
+        "ci_low": 60.0,
+        "ci_high": 60.0,
+        "method": "degenerate-zero-variance"
+      }
+    },
+    "ADJ_N6_SEEDS.delivered": {
+      "count": 40,
+      "mean": 59.825,
+      "std": 0.4464963318538847,
+      "median": 60.0,
+      "min": 58.0,
+      "max": 60.0,
+      "bootstrap_ci": {
+        "n": 40,
+        "mean": 59.825,
+        "ci_low": 59.65,
+        "ci_high": 59.925,
+        "method": "bca"
+      }
+    },
+    "ADJ_N6_SEEDS.n": {
+      "count": 40,
+      "mean": 60.0,
+      "std": 0.0,
+      "median": 60.0,
+      "min": 60.0,
+      "max": 60.0,
+      "bootstrap_ci": {
+        "n": 40,
+        "mean": 60.0,
+        "ci_low": 60.0,
+        "ci_high": 60.0,
+        "method": "degenerate-zero-variance"
+      }
+    },
+    "CTX_FS_METHODS.__len": {
+      "count": 58,
+      "mean": 2.0,
+      "std": 0.0,
+      "median": 2.0,
+      "min": 2.0,
+      "max": 2.0,
+      "bootstrap_ci": {
+        "n": 58,
+        "mean": 2.0,
+        "ci_low": 2.0,
+        "ci_high": 2.0,
+        "method": "degenerate-zero-variance"
+      }
+    },
+    "FS_LAYERS_WHEN_SPY_INTERCEPTED.__len": {
+      "count": 40,
+      "mean": 0.0,
+      "std": 0.0,
+      "median": 0.0,
+      "min": 0.0,
+      "max": 0.0,
+      "bootstrap_ci": {
+        "n": 40,
+        "mean": 0.0,
+        "ci_low": 0.0,
+        "ci_high": 0.0,
+        "method": "degenerate-zero-variance"
+      }
+    },
+    "NARROW_ATTEMPT.write.__len": {
+      "count": 40,
+      "mean": 1.0,
+      "std": 0.0,
+      "median": 1.0,
+      "min": 1.0,
+      "max": 1.0,
+      "bootstrap_ci": {
+        "n": 40,
+        "mean": 1.0,
+        "ci_low": 1.0,
+        "ci_high": 1.0,
+        "method": "degenerate-zero-variance"
+      }
+    }
+  },
+  "ratios": {
+    "L0_fileRaw_per_write": {
+      "samples": [
+        2.0,
+        2.0,
+        1.4,
+        2.0,
+        2.0,
+        2.0,
+        2.0,
+        2.0,
+        2.0,
+        1.2666666666666666,
+        2.0,
+        2.0,
+        1.9666666666666666,
+        2.0,
+        2.0,
+        2.0,
+        2.0,
+        1.1333333333333333,
+        2.0,
+        2.0,
+        2.0,
+        2.0,
+        2.0,
+        1.1,
+        2.0,
+        2.0,
+        2.0,
+        2.033333333333333,
+        2.0,
+        1.3
+      ],
+      "count": 30,
+      "mean": 1.8733333333333333,
+      "std": 0.2918300035257759,
+      "min": 1.1,
+      "max": 2.033333333333333,
+      "bootstrap_ci": {
+        "n": 30,
+        "mean": 1.8733333333333333,
+        "ci_low": 1.7366666666666668,
+        "ci_high": 1.952222222222222,
+        "method": "bca"
+      },
+      "power_vs_1.0": 0.9999999999999947,
+      "effect_size_vs_1.0": 2.9926098166126227
+    },
+    "L1_dirRaw_per_write": {
+      "samples": [
+        2.0,
+        2.0,
+        1.0666666666666667,
+        2.0,
+        1.0333333333333334,
+        2.0,
+        2.0,
+        2.0,
+        2.0,
+        1.0333333333333334,
+        1.0333333333333334,
+        2.0,
+        1.1333333333333333,
+        2.0,
+        2.0,
+        2.0,
+        2.0,
+        1.0666666666666667,
+        1.0666666666666667,
+        2.0,
+        2.0,
+        2.0,
+        2.0,
+        1.0333333333333334,
+        1.0333333333333334,
+        2.0,
+        2.0,
+        2.033333333333333,
+        2.0,
+        1.0333333333333334
+      ],
+      "count": 30,
+      "mean": 1.6855555555555555,
+      "std": 0.4550847955454608,
+      "min": 1.0333333333333334,
+      "max": 2.033333333333333,
+      "bootstrap_ci": {
+        "n": 30,
+        "mean": 1.6855555555555555,
+        "ci_low": 1.507327553128322,
+        "ci_high": 1.8411111111111111,
+        "method": "bca"
+      },
+      "power_vs_1.0": 0.9999995465574111,
+      "effect_size_vs_1.0": 1.5064347617543548
+    },
+    "L2_chokidar_per_write": {
+      "samples": [
+        1.0,
+        1.0,
+        1.0333333333333334,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0333333333333334,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0333333333333334,
+        1.0333333333333334,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0
+      ],
+      "count": 30,
+      "mean": 1.0044444444444445,
+      "std": 0.011524863454725382,
+      "min": 1.0,
+      "max": 1.0333333333333334,
+      "bootstrap_ci": {
+        "n": 30,
+        "mean": 1.0044444444444445,
+        "ci_low": 1.001111111111111,
+        "ci_high": 1.0100000000000002,
+        "method": "bca"
+      },
+      "power_vs_1.0": 0.5266117639115386,
+      "effect_size_vs_1.0": 0.3856396617542725
+    },
+    "L3_ctxfs_per_write": {
+      "samples": [
+        1.0,
+        1.0,
+        1.0333333333333334,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0333333333333334,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0333333333333334,
+        1.0333333333333334,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0
+      ],
+      "count": 30,
+      "mean": 1.0044444444444445,
+      "std": 0.011524863454725382,
+      "min": 1.0,
+      "max": 1.0333333333333334,
+      "bootstrap_ci": {
+        "n": 30,
+        "mean": 1.0044444444444445,
+        "ci_low": 1.001111111111111,
+        "ci_high": 1.0100000000000002,
+        "method": "bca"
+      },
+      "power_vs_1.0": 0.5266117639115386,
+      "effect_size_vs_1.0": 0.3856396617542725
+    }
+  },
+  "categorical": {
+    "ADJ_ABORT_TRIAL_0.code=ABORT_ERR": 28,
+    "ADJ_ABORT_TRIAL_0.name=AbortError": 28,
+    "ADJ_ABORT_TRIAL_1.code=ABORT_ERR": 28,
+    "ADJ_ABORT_TRIAL_1.name=AbortError": 28,
+    "ADJ_ABORT_TRIAL_2.code=ABORT_ERR": 28,
+    "ADJ_ABORT_TRIAL_2.name=AbortError": 28,
+    "ADJ_ABORT_TRIAL_3.code=ABORT_ERR": 28,
+    "ADJ_ABORT_TRIAL_3.name=AbortError": 28,
+    "ADJ_ABORT_TRIAL_4.code=ABORT_ERR": 28,
+    "ADJ_ABORT_TRIAL_4.name=AbortError": 28,
+    "ADJ_ITER_FIRST.done=false": 1,
+    "ADJ_ITER_FIRST.timeout=true": 4,
+    "ADJ_ITER_FIRST.value=/var/folders/n6/hn37q6pj7sj_9dmqqc2113800000gn/T/probe262-iter-J2XaNS/a.txt": 1,
+    "ADJ_ITER_PENDING_SETTLED.done=true": 5,
+    "ADJ_ITER_PENDING_SETTLED.resolved=true": 5,
+    "ADJ_ITER_RAW_PATH=/tmp/probe262-iter-4cuHsH/a.txt": 24,
+    "ADJ_ITER_RAW_PATH=/tmp/probe262-iter-K0imns/a.txt": 24,
+    "ADJ_ITER_RAW_PATH=/tmp/probe262-iter-UreNcr/a.txt": 24,
+    "ADJ_ITER_RAW_PATH=/tmp/probe262-iter-YgwZ9K/a.txt": 24,
+    "ADJ_ITER_RAW_PATH=/tmp/probe262-iter-ZshAGW/a.txt": 24,
+    "ADJ_ITER_RAW_PATH=/tmp/probe262-iter-jJQ7g0/a.txt": 24,
+    "ADJ_ITER_RAW_PATH=/var/folders/n6/hn37q6pj7sj_9dmqqc2113800000gn/T/probe262-iter-0BkPzE/a.txt": 24,
+    "ADJ_ITER_RAW_PATH=/var/folders/n6/hn37q6pj7sj_9dmqqc2113800000gn/T/probe262-iter-3YRTxl/a.txt": 24,
+    "ADJ_ITER_RAW_PATH=/var/folders/n6/hn37q6pj7sj_9dmqqc2113800000gn/T/probe262-iter-4mfbZ7/a.txt": 24,
+    "ADJ_ITER_RAW_PATH=/var/folders/n6/hn37q6pj7sj_9dmqqc2113800000gn/T/probe262-iter-bUlfs6/a.txt": 24,
+    "ADJ_ITER_RAW_PATH=/var/folders/n6/hn37q6pj7sj_9dmqqc2113800000gn/T/probe262-iter-g71cyN/a.txt": 24,
+    "ADJ_ITER_RAW_PATH=/var/folders/n6/hn37q6pj7sj_9dmqqc2113800000gn/T/probe262-iter-pAkZ5I/a.txt": 24,
+    "ADJ_ITER_RAW_PATH=C:\\Users\\RUNNER~1\\AppData\\Local\\Temp\\probe262-iter-A5IXrS\\a.txt": 24,
+    "ADJ_ITER_RAW_PATH=C:\\Users\\RUNNER~1\\AppData\\Local\\Temp\\probe262-iter-EuYQyW\\a.txt": 24,
+    "ADJ_ITER_RAW_PATH=C:\\Users\\RUNNER~1\\AppData\\Local\\Temp\\probe262-iter-NVvyHE\\a.txt": 24,
+    "ADJ_ITER_RAW_PATH=C:\\Users\\RUNNER~1\\AppData\\Local\\Temp\\probe262-iter-NWc5L5\\a.txt": 24,
+    "ADJ_ITER_RAW_PATH=C:\\Users\\RUNNER~1\\AppData\\Local\\Temp\\probe262-iter-c8gsnu\\a.txt": 24,
+    "ADJ_ITER_RAW_PATH=C:\\Users\\RUNNER~1\\AppData\\Local\\Temp\\probe262-iter-wubDBP\\a.txt": 24,
+    "ADJ_ITER_READY_STATE.state=resolved": 18,
+    "ADJ_ITER_READY_STATE_FINAL=resolved": 18,
+    "ADJ_ITER_WRITE.result=ok": 1757,
+    "ADJ_N6_META.p=/tmp/probe262-n6-0qwpGv/one.txt": 1,
+    "ADJ_N6_META.p=/tmp/probe262-n6-4xAJlD/one.txt": 1,
+    "ADJ_N6_META.p=/tmp/probe262-n6-AQj0hO/one.txt": 1,
+    "ADJ_N6_META.p=/tmp/probe262-n6-EL7SkL/one.txt": 1,
+    "ADJ_N6_META.p=/tmp/probe262-n6-K7WYa3/one.txt": 1,
+    "ADJ_N6_META.p=/tmp/probe262-n6-Q1IPuZ/one.txt": 1,
+    "ADJ_N6_META.p=/tmp/probe262-n6-RIUgcI/one.txt": 1,
+    "ADJ_N6_META.p=/tmp/probe262-n6-RXwjgJ/one.txt": 1,
+    "ADJ_N6_META.p=/tmp/probe262-n6-SS5QGe/one.txt": 1,
+    "ADJ_N6_META.p=/tmp/probe262-n6-T5h0qQ/one.txt": 1,
+    "ADJ_N6_META.p=/tmp/probe262-n6-eKVb3o/one.txt": 1,
+    "ADJ_N6_META.p=/tmp/probe262-n6-fVYy7X/one.txt": 1,
+    "ADJ_N6_META.p=/tmp/probe262-n6-sSQQQv/one.txt": 1,
+    "ADJ_N6_META.p=/tmp/probe262-n6-vhkOou/one.txt": 1,
+    "ADJ_N6_META.p=/var/folders/n6/hn37q6pj7sj_9dmqqc2113800000gn/T/probe262-n6-1VpNUz/one.txt": 1,
+    "ADJ_N6_META.p=/var/folders/n6/hn37q6pj7sj_9dmqqc2113800000gn/T/probe262-n6-4uTRqY/one.txt": 1,
+    "ADJ_N6_META.p=/var/folders/n6/hn37q6pj7sj_9dmqqc2113800000gn/T/probe262-n6-NNbrOX/one.txt": 1,
+    "ADJ_N6_META.p=/var/folders/n6/hn37q6pj7sj_9dmqqc2113800000gn/T/probe262-n6-ObUfmu/one.txt": 1,
+    "ADJ_N6_META.p=/var/folders/n6/hn37q6pj7sj_9dmqqc2113800000gn/T/probe262-n6-RPMCzb/one.txt": 1,
+    "ADJ_N6_META.p=/var/folders/n6/hn37q6pj7sj_9dmqqc2113800000gn/T/probe262-n6-SZyBr8/one.txt": 1,
+    "ADJ_N6_META.p=/var/folders/n6/hn37q6pj7sj_9dmqqc2113800000gn/T/probe262-n6-XKxJAK/one.txt": 1,
+    "ADJ_N6_META.p=/var/folders/n6/hn37q6pj7sj_9dmqqc2113800000gn/T/probe262-n6-hjcOLU/one.txt": 1,
+    "ADJ_N6_META.p=/var/folders/n6/hn37q6pj7sj_9dmqqc2113800000gn/T/probe262-n6-iEM5mK/one.txt": 1,
+    "ADJ_N6_META.p=/var/folders/n6/hn37q6pj7sj_9dmqqc2113800000gn/T/probe262-n6-kzYOuY/one.txt": 1,
+    "ADJ_N6_META.p=/var/folders/n6/hn37q6pj7sj_9dmqqc2113800000gn/T/probe262-n6-mHGwge/one.txt": 1,
+    "ADJ_N6_META.p=/var/folders/n6/hn37q6pj7sj_9dmqqc2113800000gn/T/probe262-n6-znHPnZ/one.txt": 1,
+    "ADJ_N6_META.p=C:\\Users\\RUNNER~1\\AppData\\Local\\Temp\\probe262-n6-49aMCj\\one.txt": 1,
+    "ADJ_N6_META.p=C:\\Users\\RUNNER~1\\AppData\\Local\\Temp\\probe262-n6-5jGtQG\\one.txt": 1,
+    "ADJ_N6_META.p=C:\\Users\\RUNNER~1\\AppData\\Local\\Temp\\probe262-n6-6MDeqh\\one.txt": 1,
+    "ADJ_N6_META.p=C:\\Users\\RUNNER~1\\AppData\\Local\\Temp\\probe262-n6-Dqq5GE\\one.txt": 1,
+    "ADJ_N6_META.p=C:\\Users\\RUNNER~1\\AppData\\Local\\Temp\\probe262-n6-EwMNoL\\one.txt": 1,
+    "ADJ_N6_META.p=C:\\Users\\RUNNER~1\\AppData\\Local\\Temp\\probe262-n6-ItWZ2B\\one.txt": 1,
+    "ADJ_N6_META.p=C:\\Users\\RUNNER~1\\AppData\\Local\\Temp\\probe262-n6-Qsmahk\\one.txt": 1,
+    "ADJ_N6_META.p=C:\\Users\\RUNNER~1\\AppData\\Local\\Temp\\probe262-n6-T1JwRa\\one.txt": 1,
+    "ADJ_N6_META.p=C:\\Users\\RUNNER~1\\AppData\\Local\\Temp\\probe262-n6-UVzqDQ\\one.txt": 1,
+    "ADJ_N6_META.p=C:\\Users\\RUNNER~1\\AppData\\Local\\Temp\\probe262-n6-ZnRqdQ\\one.txt": 1,
+    "ADJ_N6_META.p=C:\\Users\\RUNNER~1\\AppData\\Local\\Temp\\probe262-n6-eCCnm5\\one.txt": 1,
+    "ADJ_N6_META.p=C:\\Users\\RUNNER~1\\AppData\\Local\\Temp\\probe262-n6-u3EqSL\\one.txt": 1,
+    "ADJ_N6_META.p=C:\\Users\\RUNNER~1\\AppData\\Local\\Temp\\probe262-n6-uvXJUE\\one.txt": 1,
+    "ADJ_N6_META.p=C:\\Users\\RUNNER~1\\AppData\\Local\\Temp\\probe262-n6-whFyLO\\one.txt": 1,
+    "CONF_DELETE=SKIP": 34,
+    "CONF_ITERATOR=PASS": 34,
+    "CONF_RERESOLVE=SKIP": 34,
+    "CONF_STOP=PASS": 34,
+    "CONF_WRITE=PASS": 34,
+    "HAS_READFILE=undefined": 58,
+    "HAS_STAT=undefined": 58,
+    "HAS_WRITEFILE=undefined": 58,
+    "LAYERS_SEEN=[{\"read\":[\"**\"]},{}]": 40,
+    "NODE_WRITEFILE_MISSING_PARENT=ENOENT": 58
+  },
+  "ratio_sources": [
+    {
+      "log": "41746559054_126300922330.log.gz",
+      "writes": 30,
+      "L0_fileRaw": 60,
+      "L1_dirRaw": 60,
+      "L2_chokidar": 30,
+      "L3_ctxfs": 30
+    },
+    {
+      "log": "41746559054_126300922361.log.gz",
+      "writes": 30,
+      "L0_fileRaw": 60,
+      "L1_dirRaw": 60,
+      "L2_chokidar": 30,
+      "L3_ctxfs": 30
+    },
+    {
+      "log": "41746559054_126300922442.log.gz",
+      "writes": 30,
+      "L0_fileRaw": 42,
+      "L1_dirRaw": 32,
+      "L2_chokidar": 31,
+      "L3_ctxfs": 31
+    },
+    {
+      "log": "41746559054_126300922455.log.gz",
+      "writes": 30,
+      "L0_fileRaw": 60,
+      "L1_dirRaw": 60,
+      "L2_chokidar": 30,
+      "L3_ctxfs": 30
+    },
+    {
+      "log": "41746559054_126300922575.log.gz",
+      "writes": 30,
+      "L0_fileRaw": 60,
+      "L1_dirRaw": 31,
+      "L2_chokidar": 30,
+      "L3_ctxfs": 30
+    },
+    {
+      "log": "41746559054_126300922625.log.gz",
+      "writes": 30,
+      "L0_fileRaw": 60,
+      "L1_dirRaw": 60,
+      "L2_chokidar": 30,
+      "L3_ctxfs": 30
+    },
+    {
+      "log": "41753424524_126323749354.log.gz",
+      "writes": 30,
+      "L0_fileRaw": 60,
+      "L1_dirRaw": 60,
+      "L2_chokidar": 30,
+      "L3_ctxfs": 30
+    },
+    {
+      "log": "41753424524_126323749376.log.gz",
+      "writes": 30,
+      "L0_fileRaw": 60,
+      "L1_dirRaw": 60,
+      "L2_chokidar": 30,
+      "L3_ctxfs": 30
+    },
+    {
+      "log": "41753424524_126323749449.log.gz",
+      "writes": 30,
+      "L0_fileRaw": 60,
+      "L1_dirRaw": 60,
+      "L2_chokidar": 30,
+      "L3_ctxfs": 30
+    },
+    {
+      "log": "41753424524_126323749561.log.gz",
+      "writes": 30,
+      "L0_fileRaw": 38,
+      "L1_dirRaw": 31,
+      "L2_chokidar": 30,
+      "L3_ctxfs": 30
+    },
+    {
+      "log": "41753424524_126323749565.log.gz",
+      "writes": 30,
+      "L0_fileRaw": 60,
+      "L1_dirRaw": 31,
+      "L2_chokidar": 30,
+      "L3_ctxfs": 30
+    },
+    {
+      "log": "41753424524_126323749698.log.gz",
+      "writes": 30,
+      "L0_fileRaw": 60,
+      "L1_dirRaw": 60,
+      "L2_chokidar": 30,
+      "L3_ctxfs": 30
+    },
+    {
+      "log": "41753701139_126324976372.log.gz",
+      "writes": 30,
+      "L0_fileRaw": 59,
+      "L1_dirRaw": 34,
+      "L2_chokidar": 31,
+      "L3_ctxfs": 31
+    },
+    {
+      "log": "41753701139_126324976473.log.gz",
+      "writes": 30,
+      "L0_fileRaw": 60,
+      "L1_dirRaw": 60,
+      "L2_chokidar": 30,
+      "L3_ctxfs": 30
+    },
+    {
+      "log": "41753701139_126324976558.log.gz",
+      "writes": 30,
+      "L0_fileRaw": 60,
+      "L1_dirRaw": 60,
+      "L2_chokidar": 30,
+      "L3_ctxfs": 30
+    },
+    {
+      "log": "41753701139_126324976592.log.gz",
+      "writes": 30,
+      "L0_fileRaw": 60,
+      "L1_dirRaw": 60,
+      "L2_chokidar": 30,
+      "L3_ctxfs": 30
+    },
+    {
+      "log": "41753701139_126324976615.log.gz",
+      "writes": 30,
+      "L0_fileRaw": 60,
+      "L1_dirRaw": 60,
+      "L2_chokidar": 30,
+      "L3_ctxfs": 30
+    },
+    {
+      "log": "41753701139_126324976688.log.gz",
+      "writes": 30,
+      "L0_fileRaw": 34,
+      "L1_dirRaw": 32,
+      "L2_chokidar": 31,
+      "L3_ctxfs": 31
+    },
+    {
+      "log": "41754609497_126327663004.log.gz",
+      "writes": 30,
+      "L0_fileRaw": 60,
+      "L1_dirRaw": 32,
+      "L2_chokidar": 31,
+      "L3_ctxfs": 31
+    },
+    {
+      "log": "41754609497_126327663177.log.gz",
+      "writes": 30,
+      "L0_fileRaw": 60,
+      "L1_dirRaw": 60,
+      "L2_chokidar": 30,
+      "L3_ctxfs": 30
+    },
+    {
+      "log": "41754609497_126327663218.log.gz",
+      "writes": 30,
+      "L0_fileRaw": 60,
+      "L1_dirRaw": 60,
+      "L2_chokidar": 30,
+      "L3_ctxfs": 30
+    },
+    {
+      "log": "41754609497_126327663232.log.gz",
+      "writes": 30,
+      "L0_fileRaw": 60,
+      "L1_dirRaw": 60,
+      "L2_chokidar": 30,
+      "L3_ctxfs": 30
+    },
+    {
+      "log": "41754609497_126327663278.log.gz",
+      "writes": 30,
+      "L0_fileRaw": 60,
+      "L1_dirRaw": 60,
+      "L2_chokidar": 30,
+      "L3_ctxfs": 30
+    },
+    {
+      "log": "41754609497_126327663327.log.gz",
+      "writes": 30,
+      "L0_fileRaw": 33,
+      "L1_dirRaw": 31,
+      "L2_chokidar": 30,
+      "L3_ctxfs": 30
+    },
+    {
+      "log": "41756237186_126332888487.log.gz",
+      "writes": 30,
+      "L0_fileRaw": 60,
+      "L1_dirRaw": 31,
+      "L2_chokidar": 30,
+      "L3_ctxfs": 30
+    },
+    {
+      "log": "41756237186_126332888526.log.gz",
+      "writes": 30,
+      "L0_fileRaw": 60,
+      "L1_dirRaw": 60,
+      "L2_chokidar": 30,
+      "L3_ctxfs": 30
+    },
+    {
+      "log": "41756237186_126332888595.log.gz",
+      "writes": 30,
+      "L0_fileRaw": 60,
+      "L1_dirRaw": 60,
+      "L2_chokidar": 30,
+      "L3_ctxfs": 30
+    },
+    {
+      "log": "41756237186_126332888651.log.gz",
+      "writes": 30,
+      "L0_fileRaw": 61,
+      "L1_dirRaw": 61,
+      "L2_chokidar": 30,
+      "L3_ctxfs": 30
+    },
+    {
+      "log": "41756237186_126332888781.log.gz",
+      "writes": 30,
+      "L0_fileRaw": 60,
+      "L1_dirRaw": 60,
+      "L2_chokidar": 30,
+      "L3_ctxfs": 30
+    },
+    {
+      "log": "41756237186_126332888894.log.gz",
+      "writes": 30,
+      "L0_fileRaw": 39,
+      "L1_dirRaw": 31,
+      "L2_chokidar": 30,
+      "L3_ctxfs": 30
+    }
+  ],
+  "multiple_comparison": {
+    "L0_fileRaw_per_write": {
+      "p_value": 3.336862729618743e-16,
+      "t_statistic": 16.39119902370132,
+      "holm_threshold": 0.0125,
+      "significant_after_holm": true
+    },
+    "L1_dirRaw_per_write": {
+      "p_value": 4.262162557867044e-09,
+      "t_statistic": 8.251083004227807,
+      "holm_threshold": 0.016666666666666666,
+      "significant_after_holm": true
+    },
+    "L2_chokidar_per_write": {
+      "p_value": 0.043397417810774934,
+      "t_statistic": 2.112235418114773,
+      "holm_threshold": 0.025,
+      "significant_after_holm": false
+    },
+    "L3_ctxfs_per_write": {
+      "p_value": 0.043397417810774934,
+      "t_statistic": 2.112235418114773,
+      "holm_threshold": 0.05,
+      "significant_after_holm": true
+    }
+  }
+}
