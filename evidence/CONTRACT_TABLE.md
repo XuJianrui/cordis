@@ -37,21 +37,27 @@ Conditions, not prose. `D` = delivered, `E` = extra event, `—` = not applicabl
 | :-- | :--- | :--- | :--- | :--- | :--- |
 | T1 | linux / windows | cleared | n | **exactly n** | any job with delivered ≠ n (none in 28 jobs × 60) |
 | T2 | macOS | cleared | n | **exactly n**, provided the measured write lands after the registration window | any job with delivered ≠ n *after* the counter reset (none in 2 jobs × 60, measured) |
-| T2′ | macOS | cleared | 1, issued immediately after `watch()` resolves | **0 or 1** — the registration window can swallow it | a seed delivering 0 with the write issued ≥ p99 after resolution |
+| T2′ | macOS | cleared | 1, issued immediately after `watch()` resolves | **1** — but a pre-registration change may arrive first and be the one you see | two events for a single write with no pre-registration write present |
 | T3 | any | not cleared | n | **> n reachable** (buffer keeps the registration write) | a model run where `AtMostOnePerWrite` survives `ClearMode="uncleared"` |
 | T4 | any | — | watch disposed | **0 subsequent callbacks** | any callback after `stop()` |
 | T5 | any | — | `break` with a pending `next()` | pending settles `{done:true}` | a pending promise that never settles |
 | T6 | any | — | operation the driver lacks | `SKIP` / `ENOTSUP` | a missing capability reported as `PASS` |
 | T7 | any | — | watch registered before the path exists, then `mkdir` | shape must re-resolve or the handle must be marked stale | a live handle that is neither re-resolved nor marked stale |
 
-T2 was previously written as "macOS drops 1–2 of 60". That was the probe's
-setup write colliding with the measured one; with the counter reset after
-settling, both macOS lines deliver 60/60. T2′ is the condition that replaced it,
-and it is the one that survives: **a write issued immediately after `watch()`
-resolves can fall inside the registration window and be swallowed.** The window
-is measured, not assumed — 58/60 and 59/60 seeds on macOS received an event for
-a write made *before* registration despite `ignoreInitial: true`, with p99
-latency 23–39 ms.
+T2 was first written as "macOS drops 1–2 of 60". That was wrong: with a 300 ms
+gap and a counter reset, both macOS lines deliver 60/60. What replaced it is two
+separate facts, and they must not be merged again:
+
+**I8 — coalescing.** chokidar 4.0.3 throttles `change` per path at 50 ms, so two
+changes inside that window arrive as one. The key is time: making the second
+write 257× larger changed nothing (1.00 events either way). This is why the
+"60/60 seeds" reading was 1 and a 300 ms gap read 2.
+
+**I7 — pre-registration delivery.** On macOS a change made *before* `watch()`
+can arrive *after* it resolves: 38/40 and 35/40 seeds, against 0/40 with a
+1500 ms gap and 0/40 on ubuntu and windows in both arms. The path is the watched
+file (`dir` 0 across 80 seeds), so it is not the parent-directory change that the
+driver's `ignored` lets through.
 
 T3 is backed by the model (`NeverStale` violated in 2 steps) and by the
 observation that a later-created directory delivers nothing. It is **not**
@@ -72,7 +78,8 @@ Each is checkable, and each names what its own violation would look like.
 | **I4** | A stale handle is never silently live | `∀ h • (shape(h) ≠ actualShape) ⇒ (re-resolved(h) ∨ stale(h))` | live, shape-mismatched, not re-resolved | **model says reachable**; driver not instrumented for it |
 | **I5** | Absence of a reading is not a reading | `unmeasured(x) ⇒ ¬ assert(x)` | an `[HYPOTHESIS]` cited as settled | enforced by the ledger, not by code |
 | **I6** | Count is not delivery | `rawCallbacks ≤ 3` says nothing about `deliveries` | inferring a stop from a capped count | **held in practice**: raw 0.2 vs 15.6 delivered per job |
-| **I7** | Registration settles before it reports ready | `watch()` resolves ⇒ writes after resolution are delivered | a write issued after `await watch()` that produces no event | **does not hold**: 58/60 and 59/60 seeds on macOS saw a pre-registration write leak, so the window is open at resolve time |
+| **I7** | Resolve means quiet (macOS) | `watch()` resolves ⇒ no event for a write made before registration | a pre-registration change delivered after resolve | **does not hold on macOS**: 38/40 (Node 26) and 35/40 (Node 24) seeds; 0/40 with a 1500 ms gap; 0/40 on ubuntu and windows, both arms |
+| **I8** | One callback per change, regardless of spacing | `∀ two changes c₁,c₂ to one path • callbacks = 2` | two changes inside 50 ms delivered as one | **does not hold**: chokidar 4.0.3 `index.js:506` throttles `change` per path at 50 ms. Measured 1.00 events at gap 0 (even with a 257× size difference), 1.88–1.92 at 50 ms, 1.96–2.00 at 300 ms |
 
 I4 is the interesting one. The model cannot refute it — it *confirms* the
 violation is reachable. So I4 is not a property the implementation has; it is a
@@ -89,7 +96,8 @@ single cheapest observation that kills it.
 | :--- | :--- |
 | "One event per write" | a single linux or windows job delivers ≠ n. **Currently 0 of 28.** |
 | "macOS drops events" | **RETIRED** — with a 300 ms settle and a counter reset, both macOS lines deliver 60/60. The zeros were the probe's setup write colliding with the measured one. |
-| "`watch()` is safe to write to immediately" | a seed losing the write when it is issued after the window closes. **Currently I7 does not hold: the window is still open at resolve time.** |
+| "`watch()` is quiet at resolve time" | **RETIRED as a platform claim** — it holds on ubuntu and windows (0/80) and fails on macOS (73/80 hot, 0/80 cold). The sentence to defend is the scoped one. |
+| "two changes 50 ms apart produce two callbacks" | **does not hold**: 1.00 events at gap 0, 1.88–1.92 at 50 ms, 1.96–2.00 at 300 ms, and the source sets the window at 50 ms |
 | "The driver is not the raw layer" | `L2`/`L3` ratios converge to `L0`/`L1` (≈1.87). **Currently 1.004 vs 1.873.** |
 | "Skips are honest" | any `PASS` for a capability the driver declares `false`. **Currently 0 of 34.** |
 | "Stale is reachable" | `MC-stale` returning clean at larger bounds. **Currently violated at MaxPending = 3, MaxWrites = 3.** |

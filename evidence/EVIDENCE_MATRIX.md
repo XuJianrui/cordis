@@ -29,53 +29,79 @@ otherwise. All runs are fork runs; the fork is the probe surface.
 | Overall delivery rate | **MEASURED** | 2390 seeds read 1, 3 read 2, 7 read 0 → **2396 events for 2400 writes**. Wilson 95% on seeds with n>0: **[0.9940, 0.9986]**. | [41769479447](https://github.com/XuJianrui/cordis/actions/runs/41769479447) |
 | Event index cannot be used to deduplicate | **MEASURED** | sequence numbers increment per event, so two duplicate events receive two different numbers. 1757 writes observed, `i` range 0–99. | [41736747356](https://github.com/XuJianrui/cordis/actions/runs/41736747356) |
 
-### 1a. The mechanism of the 7 zeros — probe collision, not a lost event
+### 1a. The mechanism of the 7 zeros — a 50 ms coalescing window, not a lost event
 
-The N6 probe writes a setup value, registers the watcher, and writes the
-measured value with **no settle**, counting every callback. A follow-up probe
-(n6e) settles 300 ms after registration, **resets the counter**, then measures:
+`packages/fs-node` depends on chokidar `^4.0.3` (resolved 4.0.3). Its change
+handler is `node_modules/chokidar/index.js:506`:
 
-| platform | settled+reset: delivered | lost | doubled | arrival p50 / p99 |
-| :--- | :--- | :--- | :--- | :--- |
-| macOS 24 | **60/60** | 0 | 0 | 8 / 23 ms |
-| macOS 26 | **60/60** | 0 | 0 | 7 / 39 ms |
+```js
+if (event === handler_js_1.EVENTS.CHANGE) {
+    const isThrottled = !this._throttle(handler_js_1.EVENTS.CHANGE, path, 50);
+    if (isThrottled) return this;
+}
+```
 
-Runs: [41771498521](https://github.com/XuJianrui/cordis/actions/runs/41771498521) (n6d), shipped in the same commit as n6e.
+A second `change` for the same path **within 50 ms of the first is dropped, not
+queued**. Measured with four arms, 25 seeds each, exactly two changes per seed:
 
-So the driver does deliver the measured write. The zeros in N6 are the setup
-write's event and the measured write's event colliding inside chokidar's
-registration window, not the measured write being dropped.
+| arm | gap between the two changes | second write size | macOS 26 | macOS 24 | seeds reading 2 |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| A | 0 ms | same, 2 B | **1.00** | **1.00** | 0/25, 0/25 |
+| B | 0 ms | **515 B** (257× larger) | **1.00** | **1.00** | 0/25, 0/25 |
+| C | 50 ms | same, 2 B | 1.88 | 1.92 | 22/25, 23/25 |
+| D | 300 ms | same, 2 B | 1.96 | 2.00 | 24/25, 25/25 |
 
-**Ruled out before that, each by its own measurement:**
+Mean events per seed. **B is the deciding arm**: making the second write 257×
+larger changes nothing, so the coalescing key is **time, not file identity** — no
+`(url, mtimeMs, size)` token and no sequence number can recover the dropped
+event. C landing between 1 and 2 is what a 50 ms window looks like at exactly
+50 ms.
 
-| hypothesis | ruled out by |
-| :--- | :--- |
-| the 500 ms window was too short | n6b adaptive probe: p50 9 ms, p99 15 ms, max 15 ms; 0 seeds late |
-| all 60 seeds in one directory | n6c: shared dir lost 0, fresh-dir-per-seed lost 1 |
-| cold start (first few seeds) | n6 zeros sit at seed 10–51; none at seed ≤ 5 |
-| `watch()` resolving before ready | driver awaits `watcher.once('ready')` before returning |
+This is why the layer probe is not a counter-example: it spaces its writes
+**250 ms** apart, four times the window, and reads 30 writes → 30 events.
 
-### 1b. What the same probe exposed, and this one is real
+**So the seven zeros were the setup write and the measured write landing inside
+the same 50 ms window**, delivered as one callback — or, when the window opened
+before the measured write, as a callback attributed to the earlier one.
 
-n6e also counts events arriving before the reset. Those can only come from the
-setup write, which happened **before `watch()` was called**, with chokidar
-running `ignoreInitial: true`:
+Runs: [41773944501](https://github.com/XuJianrui/cordis/actions/runs/41773944501) (n6g).
 
-| platform | seeds that received a setup-write event |
-| :--- | :--- |
-| macOS 24 | **58 / 60** |
-| macOS 26 | **59 / 60** |
+### 1b. A write made before `watch()` can still arrive after it resolves, on macOS only
 
-`ignoreInitial` is therefore **not a cut, but a window**, and the window is as
-wide as the platform's notification latency — p99 23 ms on macOS 24 and 39 ms
-on macOS 26, against single digits on the inotify platforms.This is why only
-macOS showed the effect.
+The probe writes a file, registers a watcher, then counts what arrives in 300 ms
+without writing anything:
 
-**Consequence for the contract.** A write issued immediately after
-`await watch()` resolves can be swallowed by that window. Either `watch()`
-resolves after the window closes, or the window is documented. This is the
-"first event lost" hypothesis — previously carried as `[HYPOTHESIS]` with no
-mechanism — now with a mechanism and a measured width.
+| platform | pre-registration write delivered | same, with a 1500 ms gap |
+| :--- | :--- | :--- |
+| macOS 26 | **38 / 40 seeds** | 0 / 40 |
+| macOS 24 | **35 / 40 seeds** | 0 / 40 |
+| ubuntu 26 / 24 | 0 / 40, 0 / 40 | 0 / 40 |
+| windows 26 / 24 | 0 / 40, 0 / 40 | 0 / 40 |
+
+Path carried by the event: `file` 38/38 and 35/35; `dir` **0**; `other` **0**. So
+it is the watched file, not the parent-directory change that the driver's
+`ignored` predicate lets through — that hypothesis was tested and came back zero
+across 80 seeds.
+
+The asymmetry is the platform's: inotify and `ReadDirectoryChangesW` report only
+what happens after the watch exists. FSEvents holds the earlier notification, and
+`ignoreInitial` suppresses what the **initial scan finds**, not what the **event
+stream already holds**. A 1500 ms gap removes it, which is what a bounded replay
+window looks like.
+
+Runs: [41773140154](https://github.com/XuJianrui/cordis/actions/runs/41773140154) (n6f, six cells).
+
+### 1c. The retraction that produced 1a and 1b
+
+The first explanation written here was "macOS drops events". It was wrong, and
+the way it was wrong is the point: the probe counted callbacks anonymously
+(`n++`) with no gap between the setup write and the measured write, so 1a's
+coalescing made two writes look like one — or zero. With a 300 ms gap and a
+counter reset after it, both macOS lines deliver **60/60, zero dropped, zero
+doubled** ([`41772021308`](https://github.com/XuJianrui/cordis/actions/runs/41772021308)).
+
+The published comments now carry the corrected scope: 1680/1680 on ubuntu and
+windows, 713/720 on macOS, and this section is why.
 
 > **This is a correction to the published comments.** They said "60/60 seeds"
 > flatly, which was one cell read as if it covered all of them.

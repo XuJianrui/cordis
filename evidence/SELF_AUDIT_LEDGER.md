@@ -116,6 +116,45 @@ Format: **what was claimed** → *what caught it* → **what replaced it**.
 - Not a substitute for the retraction: the probe was wrong, *and* it found
   something. Both sentences are required.
 
+### A7d. "A write issued immediately after `await watch()` resolves can be swallowed"
+
+- What I published: that sentence, in c2 and c3. It was an inference from the
+  58/60 and 59/60 pre-registration leak, **not a measurement of a post-resolution
+  write**.
+- Caught by: building n6g to reconcile two readings that disagreed — N6 §1 read
+  **1** event for `v0 → watch → v1 immediately`, while n6f read **2** for the same
+  sequence with a 300 ms gap. A contradiction between two of my own probes is a
+  reason to stop writing, not to pick the more convenient one.
+- Result, four arms, 25 seeds each, two changes per seed and nothing else:
+
+  | arm | gap | second write size | macOS 26 | macOS 24 |
+  | :--- | :--- | :--- | :--- | :--- |
+  | A | 0 ms | 2 B | 1.00 | 1.00 |
+  | B | 0 ms | 515 B (257×) | 1.00 | 1.00 |
+  | C | 50 ms | 2 B | 1.88 | 1.92 |
+  | D | 300 ms | 2 B | 1.96 | 2.00 |
+
+  Source confirms the boundary: chokidar 4.0.3 `node_modules/chokidar/index.js:506`
+  throttles `change` per path at **50 ms**. Arm B rules out identity as the key,
+  so it is time.
+- Replaced by: the write **is delivered, but merged** with the pre-registration
+  change into one callback. Two facts now stated instead of one wrong one:
+  **I8** (50 ms coalescing, per path) and **I7** (pre-registration delivery on
+  macOS only). Both published; c2 `c62cd015`, c3 `7e1ce9cb`.
+- Corroborating detail that makes I8 usable: the layer grid spaces writes
+  **250 ms** apart, four times the window, which is exactly why it reads 30
+  writes as 30 events and never saw the throttle.
+
+### A7e. The contradiction I had to explain before writing anything
+
+`ADJ_N6_EVENTS` reads **1** in 40/40 jobs. n6f reads 1 pre-reset event on 35–38
+of 40 seeds. If a pre-registration change leaks, §1 should read 2. It read 1.
+
+That gap is what A7d resolved: §1's two writes are microseconds apart, so the
+throttle merges them. **The lesson is procedural**: two probes of mine
+disagreeing by a factor of two is not a detail to footnote — it is the whole
+question, and it has to be closed before a sentence goes out.
+
 ### A8. "`fail-fast: true` frees runner slots, so turn it on"
 
 - Caught by: asking what a cancelled sibling cell costs. This project cites
