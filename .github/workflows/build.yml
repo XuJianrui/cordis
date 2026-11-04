@@ -45,11 +45,16 @@ jobs:
         uses: actions/setup-node@v6
         with:
           node-version: 26
-          cache: yarn
       - name: Install Corepack
         run: npm install -g --force corepack@latest
       - name: Enable Corepack
         run: corepack enable
+      - name: Restore yarn cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.yarn/berry/cache
+          key: yarn-${{ runner.os }}-${{ hashFiles('yarn.lock') }}
+          restore-keys: yarn-${{ runner.os }}-
       - name: Install
         run: yarn --no-immutable
       - name: Lint
@@ -69,11 +74,16 @@ jobs:
         uses: actions/setup-node@v6
         with:
           node-version: 26
-          cache: yarn
       - name: Install Corepack
         run: npm install -g --force corepack@latest
       - name: Enable Corepack
         run: corepack enable
+      - name: Restore yarn cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.yarn/berry/cache
+          key: yarn-${{ runner.os }}-${{ hashFiles('yarn.lock') }}
+          restore-keys: yarn-${{ runner.os }}-
       - name: Install
         run: yarn --no-immutable
       - name: Build (1)
@@ -107,11 +117,16 @@ jobs:
         uses: actions/setup-node@v6
         with:
           node-version: ${{ matrix.node-version }}
-          cache: yarn
       - name: Install Corepack
         run: npm install -g --force corepack@latest
       - name: Enable Corepack
         run: corepack enable
+      - name: Restore yarn cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.yarn/berry/cache
+          key: yarn-${{ runner.os }}-${{ hashFiles('yarn.lock') }}
+          restore-keys: yarn-${{ runner.os }}-
       - name: Install
         run: yarn --no-immutable
       - name: Unit Test
