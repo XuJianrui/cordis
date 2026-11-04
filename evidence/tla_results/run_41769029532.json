@@ -1,0 +1,31 @@
+{
+  "run_id": "41769029532",
+  "sha": "1cf895c799b4029124050d94c545131bcb24af03",
+  "timestamp": "2026-11-04T03:45:24Z",
+  "tool": "tlc",
+  "bounds": {
+    "MaxPending": 3,
+    "MaxWrites": 3
+  },
+  "cases": {
+    "cleared": {
+      "expected": "clean",
+      "verdict": "clean",
+      "result": "PASS"
+    },
+    "uncleared": {
+      "expected": "violated",
+      "verdict": "violated",
+      "violated_invariant": "AtMostOnePerWrite",
+      "result": "PASS"
+    },
+    "stale": {
+      "expected": "violated",
+      "verdict": "violated",
+      "violated_invariant": "NeverStale",
+      "result": "PASS"
+    }
+  },
+  "summary": "TLC: all 3 cases matched their expected outcome",
+  "all_matched": true
+}
