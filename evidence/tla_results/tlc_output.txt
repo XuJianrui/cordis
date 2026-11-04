@@ -1,0 +1,26 @@
+----------------------------------------------------------------
+CASE cleared   - contract holds  (expect: clean)
+  verdict: clean (rc=0)
+  RESULT: PASS
+
+----------------------------------------------------------------
+CASE uncleared - duplicate reachable  (expect: violated)
+  verdict: violated (rc=12)
+Error: Invariant AtMostOnePerWrite is violated.
+Error: The behavior up to this point is:
+State 1: <Initial predicate>
+State 2: <RegistrationEvent line 103, col 5 to line 109, col 57 of module ctxfs>
+State 3: <Deliver line 76, col 5 to line 81, col 37 of module ctxfs>
+  RESULT: PASS
+
+----------------------------------------------------------------
+CASE stale     - stale reg reachable  (expect: violated)
+  verdict: violated (rc=12)
+Error: Invariant NeverStale is violated.
+Error: The behavior up to this point is:
+State 1: <Initial predicate>
+State 2: <ShapeChange line 94, col 5 to line 96, col 57 of module ctxfs>
+  RESULT: PASS
+
+================================================================
+TLC: all 3 cases matched their expected outcome
