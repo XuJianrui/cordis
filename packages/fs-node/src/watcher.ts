@@ -110,6 +110,9 @@ export class Watcher {
     this.dispose = ctx.effect(async () => {
       const watcher = watch(root, {
         ignoreInitial: true,
+        // chokidar collapses a remove-and-recreate inside its 100 ms `atomic`
+        // window into `change`, and otherwise reports `unlink` then `add`.
+        atomic: false,
         depth: isFile ? 0 : undefined,
         // chokidar also tests the root itself
         ignored: (path, stats) => {
