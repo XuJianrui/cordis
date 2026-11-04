@@ -32,8 +32,13 @@ const BLOCKS = 8
 type Variant = 'deep' | 'flat' | 'warm' | 'cold'
 
 async function attempt(ctx: Context, base: string, extra: string) {
-  const target = join(base, extra, 'relinked/target/file.ts')
-  const link = join(base, extra, 'relinked/root/linked')
+  // `extra` inserts a level *below* base and above relinked, so both variants
+  // keep the same base directory and the same cleanup target. Previously the flat
+  // arm removed `base` itself while the deep arm removed `base/r{n}`, which is a
+  // difference in what gets deleted, not in how deep the watched path sits.
+  const root = extra ? join(base, extra) : base
+  const target = join(root, 'relinked/target/file.ts')
+  const link = join(root, 'relinked/root/linked')
   mkdirSync(dirname(target), { recursive: true })
   mkdirSync(dirname(link), { recursive: true })
   writeFileSync(target, 'v0')
@@ -57,7 +62,7 @@ async function attempt(ctx: Context, base: string, extra: string) {
   const outcome = exhausted ? 'timeout'
     : got.length === 1 && resolve(got[0]) === want ? 'pass' : 'wrongPath'
   await w.dispose()
-  rmSync(join(base, extra), { recursive: true, force: true })
+  rmSync(join(root, 'relinked'), { recursive: true, force: true })
   return outcome
 }
 
@@ -92,7 +97,7 @@ describe('290 measure the measurement', () => {
             ctx = new Context()
             owned = await ctx.plugin(Fs)
           }
-          const extra = v === 'deep' ? `r${i}` : '.'
+          const extra = v === 'deep' ? `r${i}` : ''
           const r = await attempt(ctx, base, extra)
           if (r === 'pass') pass++
           else timeout++
