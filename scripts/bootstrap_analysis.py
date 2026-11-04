@@ -130,10 +130,30 @@ def main():
 
     # Compute statistics per reading type
     results = {}
+    non_numeric = {}
     for key in PATTERNS.keys():
-        data = np.array(all_readings[key], dtype=float)
-        if len(data) == 0:
+        raw = all_readings[key]
+        if not raw:
             continue
+        # Not every captured reading is a number: adj_iter_first captures a
+        # JSON object such as {"timeout":true}. Those become categorical
+        # tallies instead of being forced through float().
+        numeric = []
+        categorical = []
+        for v in raw:
+            try:
+                numeric.append(float(v))
+            except (TypeError, ValueError):
+                categorical.append(str(v))
+        if categorical and not numeric:
+            tally = {}
+            for v in categorical:
+                tally[v] = tally.get(v, 0) + 1
+            non_numeric[key] = {"count": len(categorical), "tally": tally}
+            continue
+        if not numeric:
+            continue
+        data = np.array(numeric, dtype=float)
 
         # Basic stats
         ci = bootstrap_ci(data, args.resamples, args.confidence)
@@ -160,9 +180,13 @@ def main():
     # Multiple comparison correction (Holm-Bonferroni)
     p_values = []
     for key, res in results.items():
-        if res['power_vs_1.0'] is not None:
+        if res['power_vs_1.0'] is not None and len(res['raw_values']) >= 2:
             # Two-sided t-test vs 1.0
             data = np.array(res['raw_values'])
+            if np.std(data) == 0:
+                # Degenerate: every observation identical. A t-test is undefined;
+                # leave it out of the family rather than invent a p-value.
+                continue
             t_stat, p = stats.ttest_1samp(data, 1.0)
             p_values.append((key, p, t_stat))
 
@@ -173,10 +197,10 @@ def main():
     for i, (key, p, t_stat) in enumerate(p_values):
         alpha_holm = 0.05 / (m - i)
         holm_results[key] = {
-            "p_value": p,
+            "p_value": float(p),
             "t_statistic": float(t_stat),
             "holm_threshold": alpha_holm,
-            "significant_after_holm": p < alpha_holm
+            "significant_after_holm": bool(p < alpha_holm)
         }
 
     # Summary JSON
@@ -186,9 +210,11 @@ def main():
             "total_readings": sum(len(v) for k, v in all_readings.items() if k in PATTERNS),
             "bootstrap_resamples": args.resamples,
             "confidence_level": args.confidence,
-            "correction_method": "Holm-Bonferroni"
+            "correction_method": "Holm-Bonferroni",
+            "note": "Counts and ratios are not proportions; Wilson intervals do not apply to them.",
         },
         "readings": results,
+        "non_numeric_readings": non_numeric,
         "multiple_comparison": holm_results
     }
 

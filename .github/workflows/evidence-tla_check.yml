@@ -1,4 +1,4 @@
-name: Evidence — TLA+ Model Check (Apalache)
+name: Evidence — TLA+ Model Check (TLC)
 
 on:
   workflow_dispatch:
@@ -13,10 +13,10 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  apalache:
-    name: Apalache bounded model check
+  tlc:
+    name: TLC — three configs, each with an expected verdict
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 40
     # fork only — never run in the upstream repository
     if: github.repository_owner == 'XuJianrui'
     permissions:
@@ -26,117 +26,82 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup JDK (Apalache needs Java 17+)
+      - name: Setup JDK
         uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
           java-version: '21'
 
-      - name: Download Apalache
-        id: apalache
+      - name: Download tla2tools.jar (TLC)
+        id: jar
         run: |
           set -euo pipefail
-          VERSION="0.62.4"
-          URL="https://github.com/informalsystems/apalache/releases/download/v${VERSION}/apalache-${VERSION}.tgz"
-          echo "Downloading $URL"
-          curl -LfsS "$URL" -o /tmp/apalache.tgz
-          ls -la /tmp/apalache.tgz
-          mkdir -p /tmp/apalache
-          tar -xzf /tmp/apalache.tgz -C /tmp/apalache
-          APALACHE_BIN=$(find /tmp/apalache -type f -name 'apalache-mc' -o -type f -name 'apalache' | head -1)
-          if [ -z "$APALACHE_BIN" ]; then echo "::error::apalache binary not found in archive"; find /tmp/apalache -maxdepth 3 | head -40; exit 1; fi
-          chmod +x "$APALACHE_BIN"
-          echo "APALACHE=$APALACHE_BIN" >> "$GITHUB_OUTPUT"
-          echo "found: $APALACHE_BIN"
-          "$APALACHE_BIN" version || true
+          URL="https://github.com/tlaplus/tlaplus/releases/latest/download/tla2tools.jar"
+          curl -LfsS "$URL" -o /tmp/tla2tools.jar
+          ls -la /tmp/tla2tools.jar
+          java -cp /tmp/tla2tools.jar tlc2.TLC -help 2>&1 | head -3 || true
 
-      - name: Check the three configurations
+      - name: Run the three configs and assert the expected verdict
         id: check
         run: |
-          set -uo pipefail
-          BIN="${{ steps.apalache.outputs.APALACHE }}"
-          mkdir -p evidence/tla_results/raw
+          # GitHub runs bash with -e; the runner script decides pass/fail itself.
+          set +e
+          cd evidence/tla
+          TLA_JAR=/tmp/tla2tools.jar bash run-tlc.sh 2>&1 | tee ../../tlc_output.txt
+          rc=${PIPESTATUS[0]}
+          echo "run-tlc exit=$rc"
+          echo "rc=$rc" >> "$GITHUB_OUTPUT"
+          exit $rc
 
-          # Each config isolates one property. A config is EXPECTED to fail when
-          # it asks a question the contract does not promise; the verdict table
-          # below records what each one actually said.
-          declare -A EXPECT
-          EXPECT[MC-stale]="violated"
-          EXPECT[MC-cleared]="holds"
-          EXPECT[MC-uncleared]="violated"
-
-          : > evidence/tla_results/verdicts.txt
-          overall=0
-          for cfg in MC-stale MC-cleared MC-uncleared; do
-            echo "==================== $cfg ===================="
-            OUT="evidence/tla_results/raw/${cfg}.txt"
-            ( cd evidence/tla && "$BIN" check \
-                --config="${cfg}.cfg" \
-                --length=20 \
-                ctxfs.tla ) > "$OUT" 2>&1
-            rc=$?
-            echo "exit=$rc"
-            tail -25 "$OUT"
-
-            # Apalache exit codes: 0 = no error, 12 = invariant violation,
-            # 19/20 = other check outcomes. Classify from the text to stay robust.
-            if grep -qE 'violat|Invariant .* is violated|Counterexample' "$OUT"; then
-              verdict="violated"
-            elif grep -qE 'No error|checks passed|The outcome is: OK' "$OUT"; then
-              verdict="holds"
-            elif [ $rc -eq 0 ]; then
-              verdict="holds"
-            else
-              verdict="error(exit=$rc)"
-            fi
-
-            echo "$cfg|$verdict|expected=${EXPECT[$cfg]}" >> evidence/tla_results/verdicts.txt
-            echo "$cfg -> $verdict (expected ${EXPECT[$cfg]})"
-
-            # A mismatch is signal, not a crash: record it and keep going.
-            if [ "$verdict" != "${EXPECT[$cfg]}" ]; then
-              echo "::warning::$cfg gave '$verdict', expected '${EXPECT[$cfg]}'"
-            fi
-          done
-
-          echo "----- verdict table -----"
-          cat evidence/tla_results/verdicts.txt
-          exit 0
-
-      - name: Write result JSON
+      - name: Collect machine-readable summary
         if: always()
-        id: extract
         run: |
-          set -uo pipefail
+          set +e
+          mkdir -p evidence/tla_results
+          cp tlc_output.txt evidence/tla_results/ 2>/dev/null || true
           python3 - <<'PY'
-          import json, os, pathlib, datetime, re
-          root = pathlib.Path("evidence/tla_results")
-          verdicts = {}
-          vf = root / "verdicts.txt"
-          if vf.exists():
-              for line in vf.read_text().splitlines():
-                  parts = line.split("|")
-                  if len(parts) == 3:
-                      verdicts[parts[0]] = {"verdict": parts[1], "expected": parts[2].split("=",1)[-1]}
-          # pull state counts from raw logs if present
-          counts = {}
-          for p in (root / "raw").glob("*.txt"):
+          import json, os, re, pathlib, datetime
+          out_dir = pathlib.Path("evidence/tla_results")
+          out_dir.mkdir(parents=True, exist_ok=True)
+          txt = ""
+          p = pathlib.Path("tlc_output.txt")
+          if p.exists():
               txt = p.read_text(errors="replace")
-              m = re.findall(r"([0-9]+) states found", txt) or re.findall(r"states: ([0-9]+)", txt)
-              counts[p.stem] = m[-1] if m else None
-          run_id = os.environ.get("GITHUB_RUN_ID", "local")
-          sha = os.environ.get("GITHUB_SHA", "")
+
+          cases = {}
+          cur = None
+          for line in txt.splitlines():
+              m = re.match(r"CASE (\S+)\s+\(expect: (\w+)\)", line.strip())
+              if m:
+                  cur = m.group(1)
+                  cases[cur] = {"expected": m.group(2)}
+                  continue
+              if cur:
+                  m2 = re.search(r"verdict: (\w+)", line)
+                  if m2:
+                      cases[cur]["verdict"] = m2.group(1)
+                  if "RESULT: PASS" in line:
+                      cases[cur]["result"] = "PASS"
+                  if "RESULT: FAIL" in line:
+                      cases[cur]["result"] = "FAIL"
+
+          summary_line = ""
+          for line in txt.splitlines():
+              if line.startswith("TLC: "):
+                  summary_line = line.strip()
+
           out = {
-              "run_id": run_id,
-              "sha": sha,
-              "timestamp": datetime.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ"),
-              "tool": "apalache",
-              "version": "0.62.4",
-              "bounds": {"max_pending": 3, "max_writes": 3, "length": 20},
-              "verdicts": verdicts,
-              "state_counts": counts,
+              "run_id": os.environ.get("GITHUB_RUN_ID"),
+              "sha": os.environ.get("GITHUB_SHA"),
+              "timestamp": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+              "tool": "tlc",
+              "bounds": {"MaxPending": 3, "MaxWrites": 3},
+              "cases": cases,
+              "summary": summary_line,
+              "all_matched": summary_line.startswith("TLC: all 3 cases matched"),
           }
-          (root / f"run_{run_id}.json").write_text(json.dumps(out, indent=2))
+          rid = out["run_id"] or "local"
+          (out_dir / f"run_{rid}.json").write_text(json.dumps(out, indent=2))
           print(json.dumps(out, indent=2))
           PY
 
@@ -148,21 +113,33 @@ jobs:
           path: evidence/tla_results/
           retention-days: 30
 
+      - name: Commit results
+        if: always()
+        run: |
+          set +e
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add evidence/tla_results/
+          git commit -m "evidence(tla): TLC verdicts from run ${{ github.run_id }}"
+          git pull --rebase --quiet
+          git push
+
       - name: Summary
         if: always()
         run: |
-          echo "## TLA+ Model Check (Apalache)" >> "$GITHUB_STEP_SUMMARY"
+          echo "## TLA+ model check (TLC)" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
-          if [ -f evidence/tla_results/verdicts.txt ]; then
-            echo "| config | verdict | expected |" >> "$GITHUB_STEP_SUMMARY"
-            echo "| :--- | :--- | :--- |" >> "$GITHUB_STEP_SUMMARY"
-            while IFS='|' read -r cfg verdict exp; do
-              echo "| $cfg | $verdict | ${exp#expected=} |" >> "$GITHUB_STEP_SUMMARY"
-            done < evidence/tla_results/verdicts.txt
-          else
-            echo "No verdicts produced." >> "$GITHUB_STEP_SUMMARY"
-          fi
-          echo "" >> "$GITHUB_STEP_SUMMARY"
-          echo "Bounds: MaxPending=3, MaxWrites=3, --length=20." >> "$GITHUB_STEP_SUMMARY"
-          echo "A violated verdict is the expected answer for the two configs that" >> "$GITHUB_STEP_SUMMARY"
-          echo "ask the contract to promise something it does not promise." >> "$GITHUB_STEP_SUMMARY"
+          python3 - <<'PY' >> "$GITHUB_STEP_SUMMARY"
+          import json, pathlib
+          for p in sorted(pathlib.Path("evidence/tla_results").glob("run_*.json")):
+              d = json.loads(p.read_text())
+              print(f"**{d['summary'] or 'no summary'}**")
+              print("")
+              print("| config | expected | verdict | result |")
+              print("| :--- | :--- | :--- | :--- |")
+              for k, v in d["cases"].items():
+                  print(f"| {k} | {v.get('expected')} | {v.get('verdict')} | {v.get('result')} |")
+              print("")
+              print(f"run `{d['run_id']}` · sha `{str(d['sha'])[:7]}` · bounds MaxPending=3, MaxWrites=3")
+              break
+          PY
