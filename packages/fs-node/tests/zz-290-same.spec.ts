@@ -1,5 +1,5 @@
 import { Context, Fiber } from 'cordis'
-import { rmSync, symlinkSync, writeFileSync } from 'node:fs'
+import { mkdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 import { afterEach, beforeAll, describe, expect, it } from 'vitest'
 import { fileURLToPath } from 'node:url'
@@ -24,6 +24,10 @@ const ROUNDS = Number(process.env.SAME_ROUNDS || 40)
 
 function write(name: string, content = '') {
   const path = resolve(fixture, name)
+  // the spec's `write` creates the parent, which a round relies on after the
+  // fixture is cleared
+  mkdirSync(dirname(path), { recursive: true })
+  writeFileSync(path, content)
   return { path, content }
 }
 
@@ -57,8 +61,6 @@ describe('the relink case, forty times, at its own paths', () => {
     it(`round ${index}`, async () => {
       const target = write('relinked/target/file.ts')
       const link = write('relinked/root/linked')
-      writeFileSync(target.path, '')
-      writeFileSync(link.path, '')
 
       const root = new Context()
       root.baseUrl = import.meta.url
