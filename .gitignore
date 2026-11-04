@@ -39,3 +39,8 @@ report.*.json
 
 AGENTS.md
 CLAUDE.md
+
+# internal adjudication / evidence tree: never part of an upstream contribution
+verify/
+.workbuddy/
+.workbuddy-ai/
