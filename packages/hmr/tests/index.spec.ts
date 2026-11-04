@@ -1,11 +1,12 @@
 import { Context, Fiber, FiberState } from 'cordis'
 import Loader from '@cordisjs/plugin-loader'
 import Logger from '@cordisjs/plugin-logger-console'
-import { cpSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { cpSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 import { expect, describe, it, beforeAll, afterAll, afterEach, beforeEach } from 'vitest'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import Hmr from '../src/index.ts'
+import Fs from '@cordisjs/plugin-fs-node'
 
 const testDir = dirname(fileURLToPath(import.meta.url))
 const templateDir = resolve(testDir, 'fixtures')
@@ -529,5 +530,53 @@ describe('HMR', () => {
         host?.parent.remove(host.options.id)
       }
     }, 15000)
+  })
+
+  // The two failures on 2026-10-14 (`db20555`, `6350fb5`) were both tests that
+  // counted reloads driven by the watcher: `dependency chain` observed
+  // `['plugin-dep.ts', 'plugin-dep.ts']` where it expected one, and `skips a
+  // child whose host is replaced during unload` saw one live fiber where it
+  // expected two. Both tests were converted to call `reconcile()` directly in
+  // #244, so neither depends on the watcher now and neither can fail this way.
+  // What follows measures the primitive they were standing on: how many changes
+  // one write produces.
+  describe('one write, one change', () => {
+    let ctx: Context
+    let fiber: Fiber<Context>
+    let dir: string
+
+    beforeAll(async () => {
+      dir = resolve(fixtureDir, 'writes')
+      rmSync(dir, { recursive: true, force: true })
+      mkdirSync(dir, { recursive: true })
+      const root = new Context()
+      const instance = await root.plugin(Fs)
+      fiber = instance
+      await root.inject(['fs'], (inner) => { ctx = inner })
+    }, 20000)
+
+    afterAll(async () => {
+      await fiber?.dispose()
+      rmSync(dir, { recursive: true, force: true })
+    })
+
+    for (let index = 0; index < 20; index++) {
+      it(`reports a single change for one write at index ${index}`, async () => {
+        const file = resolve(dir, `w${index}.ts`)
+        writeFileSync(file, 'v0')
+
+        const seen: string[] = []
+        const watcher = ctx.fs.watch(dir, { filter: ['.'] })
+        watcher.on('change', (filename: string) => seen.push(filename))
+        await new Promise<void>((done) => watcher.on('ready', done))
+
+        writeFileSync(file, 'v1')
+        // the hmr debounce is 100 ms; a second event arriving later starts a
+        // second batch, which is the duplicate reload that was observed
+        await new Promise(r => setTimeout(r, 1500))
+
+        expect(seen.filter(path => path === file).length).to.equal(1)
+      }, 15000)
+    }
   })
 })
