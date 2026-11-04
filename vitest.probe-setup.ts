@@ -1,4 +1,6 @@
-// Fork-only evidence tooling.
+// Fork-only evidence tooling. Lint: this file exists to print readings into the
+// CI log, so `no-console` is the point rather than an oversight.
+/* eslint-disable no-console */
 //
 // The #262 probes in `packages/*/tests/zz-{probe,verify}-262*` are instruments,
 // not tests: their job is to print a reading, and the reading is what gets
