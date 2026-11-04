@@ -129,10 +129,13 @@ jobs:
         run: |
           echo "## TLA+ model check (TLC)" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
-          python3 - <<'PY' >> "$GITHUB_STEP_SUMMARY"
+          python3 - >> "$GITHUB_STEP_SUMMARY" <<'PY'
           import json, pathlib
-          for p in sorted(pathlib.Path("evidence/tla_results").glob("run_*.json")):
-              d = json.loads(p.read_text())
+          files = sorted(pathlib.Path("evidence/tla_results").glob("run_*.json"))
+          if not files:
+              print("No result JSON produced.")
+          else:
+              d = json.loads(files[-1].read_text())
               print(f"**{d['summary'] or 'no summary'}**")
               print("")
               print("| config | expected | verdict | result |")
@@ -141,5 +144,4 @@ jobs:
                   print(f"| {k} | {v.get('expected')} | {v.get('verdict')} | {v.get('result')} |")
               print("")
               print(f"run `{d['run_id']}` · sha `{str(d['sha'])[:7]}` · bounds MaxPending=3, MaxWrites=3")
-              break
           PY
