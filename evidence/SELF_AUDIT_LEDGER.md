@@ -75,11 +75,46 @@ Format: **what was claimed** → *what caught it* → **what replaced it**.
   Every shortfall is on macOS (4 on macOS 26, 2 on macOS 24); all 28
   ubuntu/windows jobs were exact. Fisher exact 6/12 vs 28/28: **p = 2.4 × 10⁻⁴**.
 - Replaced by: *one event per write holds on ubuntu and windows across 28 jobs;
-  on macOS 6 of 12 jobs dropped one or two of sixty.* Overall 2394/2400 =
-  0.99750, delivered-per-job BCa CI **[59.65, 59.93]**.
-- Card: 5 (grid ≠ contract) and 1 (single cell ≠ general). **The published
-  comments still carry the old sentence** — they have not been re-published with
-  this correction, and that is tracked as an open action, not as done.
+  on macOS 6 of 12 jobs dropped one or two of sixty.*
+- Card: 5 (grid ≠ contract) and 1 (single cell ≠ general).
+
+### A7b. "macOS drops events" — the explanation I was about to publish
+
+- What I wrote first: the shortfall is macOS-side delivery loss, mechanism open.
+- Caught by: the user asking **"会不会是你测试本身有bug"**, which is the exact
+  question this project has failed to ask seven times before. So I built three
+  probes instead of writing the paragraph.
+- **n6b** ruled out a short window: adaptive wait, arrival p50 9 ms, p99 15 ms,
+  max 15 ms against a 500 ms window; zero seeds late.
+  **n6c** ruled out the growing directory: shared-dir arm lost 0, fresh-dir-per-seed
+  arm lost 1 — the opposite of the hypothesis.
+  **n6d** was then built to test the remaining candidate (a settle window) and
+  **produced negative latencies** — p50 −17, −23, −94 ms — which is impossible
+  for the write it claimed to measure. n6d was **confounded and is retracted**,
+  not reinterpreted: the settle arm was counting the setup write's event.
+  **n6e** removed the confounder (settle 300 ms, then **reset the counter**):
+  both macOS lines then delivered **60/60, 0 lost, 0 doubled**.
+- Replaced by: the seven zeros were the **probe's setup write colliding with the
+  measured write**, not a dropped event. The published comments now say so, and
+  the correction is live: c2 `73ecc5c5`, c3 `65a7349e`.
+- Card: 1 (probe defect read as a platform limit). **This is the eighth
+  instance in this project**, and the first one where the user, not the gate,
+  raised it.
+
+### A7c. What the failed probe was worth anyway
+
+- n6e also counts events arriving *before* the reset. Those can only come from
+  the setup write, made **before** `watch()` was called, with
+  `ignoreInitial: true` in force.
+- Measured: **58/60 seeds on macOS 24, 59/60 on macOS 26** received such an
+  event. So registration suppression is a **window**, not a cut, and the window
+  is as wide as the platform's notification latency (p99 23 ms and 39 ms on
+  macOS; single digits on inotify — which is why only macOS showed it).
+- This is the "first event lost" hypothesis, previously carried as
+  `[HYPOTHESIS]` with no mechanism, now with a measured width. Recorded as
+  invariant **I7**, which **does not hold**.
+- Not a substitute for the retraction: the probe was wrong, *and* it found
+  something. Both sentences are required.
 
 ### A8. "`fail-fast: true` frees runner slots, so turn it on"
 
@@ -119,6 +154,7 @@ Counts, because a chain that does not balance is a chain with a hole.
 | stage | items | where |
 | :--- | :-- | :--- |
 | **produced** | 4 ratio series (n=30) | `evidence/statistical/summary.json` |
+| | 5 probe rounds (n6, n6b, n6c, n6d-retracted, n6e) | runs 41756237186, 41770958846, 41771498521, 41771644892 |
 | | 32 numeric reading series | same |
 | | 86 categorical tallies | same |
 | | 3 model verdicts | `evidence/tla_results/run_41769029532.json` |
@@ -145,7 +181,7 @@ re-fetched with `scripts/fetch_job_logs.py` while the artifact lives.
 
 | not done | why it matters |
 | :--- | :--- |
-| Re-published the three comments with the macOS correction (A7) | the published text still says "60/60 seeds"; until it is patched, a reader gets the wrong scope |
+| ~~Re-published the comments with the macOS correction~~ | **done**: c2 `73ecc5c5`, c3 `65a7349e`, both now say the reset-and-settle result and name the registration window |
 | Raised the job count to fix power 0.53 | the L3 ratio stays inconclusive; ~90 jobs would be needed at the measured effect size |
 | Instrumented the driver for I4 (stale handle) | the model says the state is reachable; the driver side is unmeasured, so I4 stays an obligation |
 | Explained `FS_LAYERS_WHEN_SPY_INTERCEPTED = 0` | recorded as O4, not cited |

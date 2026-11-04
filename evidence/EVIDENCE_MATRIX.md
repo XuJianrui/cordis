@@ -24,15 +24,62 @@ otherwise. All runs are fork runs; the fork is the probe surface.
 | claim | grade | reading | run |
 | :--- | :--- | :--- | :--- |
 | A fresh watcher delivers exactly one event per write | **SCOPED — ubuntu and windows only** | 28/28 jobs on ubuntu/windows delivered 60/60 seeds. 1680/1680 delivery opportunities. | [41736747356](https://github.com/XuJianrui/cordis/actions/runs/41736747356), [41756237186](https://github.com/XuJianrui/cordis/actions/runs/41756237186) |
-| The same holds on macOS | **FALSE as stated** | 6 of 12 macOS jobs fell short: 5 at 59/60, 1 at 58/60. macOS 24: 4/6 full (mean 59.500). macOS 26: 2/6 full (mean 59.333). | same |
+| The same holds on macOS | **FALSE as stated** | 6 of 12 macOS jobs fell short: 5 at 59/60, 1 at 58/60. macOS 24: 4/6 full. macOS 26: 2/6 full. Seed-level: 713/720 = 0.9903. | same |
 | The macOS shortfall is chance | **rejected** | Fisher exact, 6/12 vs 28/28 full jobs: **p = 2.4 × 10⁻⁴** | derived |
-| Overall delivery rate | **MEASURED** | 2394/2400 = **0.99750** (40 jobs × 60 seeds). BCa 95% CI on delivered-per-job: **[59.65, 59.93]** | [41769479447](https://github.com/XuJianrui/cordis/actions/runs/41769479447) |
+| Overall delivery rate | **MEASURED** | 2390 seeds read 1, 3 read 2, 7 read 0 → **2396 events for 2400 writes**. Wilson 95% on seeds with n>0: **[0.9940, 0.9986]**. | [41769479447](https://github.com/XuJianrui/cordis/actions/runs/41769479447) |
 | Event index cannot be used to deduplicate | **MEASURED** | sequence numbers increment per event, so two duplicate events receive two different numbers. 1757 writes observed, `i` range 0–99. | [41736747356](https://github.com/XuJianrui/cordis/actions/runs/41736747356) |
 
-> **This is a correction to the published comments.** They say "60/60 seeds"
-> flatly. That is true of the cell that was quoted (a non-macOS cell) and false
-> of macOS. The honest sentence is: *one event per write holds on ubuntu and
-> windows across 28 jobs; on macOS 6 of 12 jobs dropped one or two of sixty.*
+### 1a. The mechanism of the 7 zeros — probe collision, not a lost event
+
+The N6 probe writes a setup value, registers the watcher, and writes the
+measured value with **no settle**, counting every callback. A follow-up probe
+(n6e) settles 300 ms after registration, **resets the counter**, then measures:
+
+| platform | settled+reset: delivered | lost | doubled | arrival p50 / p99 |
+| :--- | :--- | :--- | :--- | :--- |
+| macOS 24 | **60/60** | 0 | 0 | 8 / 23 ms |
+| macOS 26 | **60/60** | 0 | 0 | 7 / 39 ms |
+
+Runs: [41771498521](https://github.com/XuJianrui/cordis/actions/runs/41771498521) (n6d), shipped in the same commit as n6e.
+
+So the driver does deliver the measured write. The zeros in N6 are the setup
+write's event and the measured write's event colliding inside chokidar's
+registration window, not the measured write being dropped.
+
+**Ruled out before that, each by its own measurement:**
+
+| hypothesis | ruled out by |
+| :--- | :--- |
+| the 500 ms window was too short | n6b adaptive probe: p50 9 ms, p99 15 ms, max 15 ms; 0 seeds late |
+| all 60 seeds in one directory | n6c: shared dir lost 0, fresh-dir-per-seed lost 1 |
+| cold start (first few seeds) | n6 zeros sit at seed 10–51; none at seed ≤ 5 |
+| `watch()` resolving before ready | driver awaits `watcher.once('ready')` before returning |
+
+### 1b. What the same probe exposed, and this one is real
+
+n6e also counts events arriving before the reset. Those can only come from the
+setup write, which happened **before `watch()` was called**, with chokidar
+running `ignoreInitial: true`:
+
+| platform | seeds that received a setup-write event |
+| :--- | :--- |
+| macOS 24 | **58 / 60** |
+| macOS 26 | **59 / 60** |
+
+`ignoreInitial` is therefore **not a cut, but a window**, and the window is as
+wide as the platform's notification latency — p99 23 ms on macOS 24 and 39 ms
+on macOS 26, against single digits on the inotify platforms.This is why only
+macOS showed the effect.
+
+**Consequence for the contract.** A write issued immediately after
+`await watch()` resolves can be swallowed by that window. Either `watch()`
+resolves after the window closes, or the window is documented. This is the
+"first event lost" hypothesis — previously carried as `[HYPOTHESIS]` with no
+mechanism — now with a mechanism and a measured width.
+
+> **This is a correction to the published comments.** They said "60/60 seeds"
+> flatly, which was one cell read as if it covered all of them.
+
 
 ---
 
