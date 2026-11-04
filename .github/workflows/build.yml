@@ -3,6 +3,12 @@ name: Build
 on:
   push:
   pull_request:
+  workflow_dispatch:
+    inputs:
+      light:
+        description: 'Light run: ubuntu × Node 24 only (skips the macOS/Windows cells)'
+        type: boolean
+        default: true
 
 concurrency:
   # Each push to `main` gets its own group, so every commit there is built and published.
@@ -10,6 +16,25 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # Deciding the matrix in one cheap ubuntu job keeps the choice visible in the
+  # logs, instead of folding it into an expression nobody can read.
+  plan:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.pick.outputs.matrix }}
+    steps:
+      - name: Pick the matrix
+        id: pick
+        run: |
+          if [ "${{ inputs.light }}" = "true" ]; then
+            # A manual light run: one cell, for iterating without touching macOS.
+            echo 'matrix={"include":[{"os":"ubuntu-latest","node-version":24}]}' >> "$GITHUB_OUTPUT"
+          else
+            echo 'matrix={"include":[{"os":"ubuntu-latest","node-version":24},{"os":"ubuntu-latest","node-version":26},{"os":"windows-latest","node-version":24},{"os":"windows-latest","node-version":26},{"os":"macos-latest","node-version":24},{"os":"macos-latest","node-version":26}]}' >> "$GITHUB_OUTPUT"
+          fi
+      - name: Show the choice
+        run: echo "matrix=${{ steps.pick.outputs.matrix }}"
+
   lint:
     runs-on: ubuntu-latest
 
@@ -20,6 +45,7 @@ jobs:
         uses: actions/setup-node@v6
         with:
           node-version: 26
+          cache: yarn
       - name: Install Corepack
         run: npm install -g --force corepack@latest
       - name: Enable Corepack
@@ -43,6 +69,7 @@ jobs:
         uses: actions/setup-node@v6
         with:
           node-version: 26
+          cache: yarn
       - name: Install Corepack
         run: npm install -g --force corepack@latest
       - name: Enable Corepack
@@ -63,13 +90,15 @@ jobs:
           yarn yakumo publish
 
   test:
+    needs: plan
     runs-on: ${{ matrix.os }}
 
     strategy:
+      # A red cell is evidence, not noise: the whole matrix is kept on purpose.
+      # `fail-fast: true` would cancel the sibling cells and throw away the
+      # cross-platform comparison this project cites.
       fail-fast: false
-      matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
-        node-version: [24, 26]
+      matrix: ${{ fromJson(needs.plan.outputs.matrix) }}
 
     steps:
       - name: Check out
@@ -78,6 +107,7 @@ jobs:
         uses: actions/setup-node@v6
         with:
           node-version: ${{ matrix.node-version }}
+          cache: yarn
       - name: Install Corepack
         run: npm install -g --force corepack@latest
       - name: Enable Corepack
