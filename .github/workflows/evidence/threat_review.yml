@@ -1,0 +1,69 @@
+name: Evidence — Threat Model Review (STRIDE)
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [probe-262-rebuild]
+    paths:
+      - 'evidence/threat_model.md'
+      - '.github/workflows/evidence/threat_review.yml'
+
+concurrency:
+  group: evidence-threat-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  threat_review:
+    name: STRIDE threat model format check
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    # 仅在 fork 仓库运行，防止误触发上游
+    if: github.repository_owner == 'XuJianrui'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Validate threat model structure
+        run: |
+          set -euo pipefail
+          FILE="evidence/threat_model.md"
+          if [ ! -f "$FILE" ]; then
+            echo "::error file=$FILE::threat_model.md not found"
+            exit 1
+          fi
+
+          # Check required sections
+          REQUIRED=(
+            "## STRIDE Threat Model"
+            "### 1. intercept (ε=U default)"
+            "### 2. mount (protocol dispatch)"
+            "### 3. watch (TOCTOU on shape registration)"
+            "### 4. rename (replace semantics)"
+            "### 5. link (target check)"
+            "## Attack Trees"
+            "## Mitigations & Convergence Path"
+            "## Open Questions"
+          )
+
+          for section in "${REQUIRED[@]}"; do
+            if ! grep -qF "$section" "$FILE"; then
+              echo "::error file=$FILE::Missing required section: $section"
+              exit 1
+            fi
+          done
+
+          # Check STRIDE table per primitive (S,T,R,I,D,E x 5)
+          STRIDE_COUNT=$(grep -cE '^\| [STRIDE] ' "$FILE" || echo 0)
+          if [ "$STRIDE_COUNT" -lt 25 ]; then
+            echo "::warning file=$FILE::STRIDE table has only $STRIDE_COUNT entries (expected ≥25)"
+          fi
+
+          echo "✅ Threat model structure valid"
+
+      - name: Summary
+        run: |
+          echo "## Threat Model Review" >> $GITHUB_STEP_SUMMARY
+          echo "- **File**: evidence/threat_model.md" >> $GITHUB_STEP_SUMMARY
+          echo "- **Structure**: ✅ Valid" >> $GITHUB_STEP_SUMMARY
+          echo "- **STRIDE entries**: $(grep -cE '^\| [STRIDE] ' evidence/threat_model.md || echo 0)" >> $GITHUB_STEP_SUMMARY
+          echo "- **Required sections**: All present" >> $GITHUB_STEP_SUMMARY

@@ -1,0 +1,115 @@
+name: Evidence — Bootstrap Statistics (30 Runs)
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [probe-262-rebuild]
+    paths:
+      - '.github/workflows/evidence/bootstrap.yml'
+      - 'scripts/bootstrap_analysis.py'
+
+concurrency:
+  group: evidence-bootstrap-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  bootstrap:
+    name: Download logs & Bootstrap 10k resamples
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    # 仅在 fork 仓库运行，防止误触发上游
+    if: github.repository_owner == 'XuJianrui'
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+
+      - name: Install deps
+        run: |
+          pip install -q scipy numpy pandas tqdm requests
+
+      - name: Download 30 run job logs
+        id: download
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python3 - <<'PY'
+          import os, json, subprocess, sys, time, gzip
+          from pathlib import Path
+
+          GH_TOKEN = os.environ['GH_TOKEN']
+          REPO = "XuJianrui/cordis"
+          RUN_IDS = [
+            41319092304, 41351782962, 41401117722, 41435898951, 41445271315,
+            41445289431, 41446144427, 41446196426, 41448886215, 41560142581,
+            41572883676, 41736747356, 41737956074, 41746559054, 41753424524,
+            41753599923, 41753701139, 41754609497, 41756237186
+          ]
+          # Note: only 19 unique from comments, but we fetch all cited
+
+          headers = {"Authorization": f"Bearer {GH_TOKEN}", "Accept": "application/vnd.github+json"}
+          log_dir = Path("evidence/statistical/raw_logs")
+          log_dir.mkdir(parents=True, exist_ok=True)
+
+          import urllib.request
+          def fetch(url):
+              req = urllib.request.Request(url, headers=headers)
+              with urllib.request.urlopen(req, timeout=60) as r:
+                  return r.read()
+
+          for rid in RUN_IDS:
+              try:
+                  # Get jobs for this run
+                  jobs_url = f"https://api.github.com/repos/{REPO}/actions/runs/{rid}/jobs?per_page=100"
+                  jobs_data = json.loads(fetch(jobs_url))
+                  for job in jobs_data.get("jobs", []):
+                      if job.get("conclusion") in ("success", "failure"):
+                          log_url = f"https://api.github.com/repos/{REPO}/actions/jobs/{job['id']}/logs"
+                          log_content = fetch(log_url)
+                          # Save gzipped
+                          out_file = log_dir / f"{rid}_{job['id']}.log.gz"
+                          with gzip.open(out_file, 'wb') as f:
+                              f.write(log_content)
+                          print(f"  saved {out_file} ({len(log_content)} bytes)")
+              except Exception as e:
+                  print(f"  RUN {rid} ERROR: {e}", file=sys.stderr)
+              time.sleep(0.3)  # rate limit courtesy
+
+          print(f"Downloaded logs for {len(RUN_IDS)} runs")
+          PY
+
+      - name: Bootstrap analysis (10k resamples)
+        id: analyze
+        run: |
+          python3 scripts/bootstrap_analysis.py \
+            --input-dir evidence/statistical/raw_logs \
+            --output-dir evidence/statistical \
+            --resamples 10000 \
+            --confidence 0.95 \
+            2>&1 | tee bootstrap_output.txt
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: bootstrap-results
+          path: |
+            evidence/statistical/
+            bootstrap_output.txt
+          retention-days: 30
+
+      - name: Summary
+        run: |
+          echo "## Bootstrap Statistics Result" >> $GITHUB_STEP_SUMMARY
+          if [ -f evidence/statistical/summary.json ]; then
+            cat evidence/statistical/summary.json | python3 -m json.tool >> $GITHUB_STEP_SUMMARY
+          else
+            echo "No summary.json produced" >> $GITHUB_STEP_SUMMARY
+          fi

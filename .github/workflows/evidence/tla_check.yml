@@ -1,0 +1,104 @@
+name: Evidence — TLA+ Model Check (Apalache)
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [probe-262-rebuild]
+    paths:
+      - 'verify/spec/ctxfs.tla'
+      - '.github/workflows/evidence/tla_check.yml'
+
+concurrency:
+  group: evidence-tla-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  apalache:
+    name: Apalache bounded model check
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    # 仅在 fork 仓库运行，防止误触发上游
+    if: github.repository_owner == 'XuJianrui'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup JDK (Apalache needs Java 11+)
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '21'
+
+      - name: Download Apalache
+        id: apalache
+        run: |
+          VERSION="0.28.0"
+          URL="https://github.com/informalsystems/apalache/releases/download/v${VERSION}/apalache-${VERSION}-linux.tar.gz"
+          curl -LfsS "$URL" -o /tmp/apalache.tgz
+          tar -xzf /tmp/apalache.tgz -C /tmp
+          echo "APALACHE=/tmp/apalache-${VERSION}/bin/apalache" >> $GITHUB_OUTPUT
+
+      - name: Run Apalache (NeverStale invariant, bounded 30 steps)
+        id: check
+        run: |
+          set -euo pipefail
+          ${{ steps.apalache.outputs.APALACHE }} check \
+            --inv=NeverStale \
+            --max-steps=30 \
+            --length=10 \
+            --config-file=/dev/null \
+            verify/spec/ctxfs.tla 2>&1 | tee apalache_output.txt
+
+      - name: Extract results
+        id: extract
+        run: |
+          set -euo pipefail
+          # Parse key metrics from output
+          STATES=$(grep -oE 'states: [0-9]+' apalache_output.txt | tail -1 | awk '{print $2}' || echo "unknown")
+          VIOLATIONS=$(grep -oE 'violations: [0-9]+' apalache_output.txt | tail -1 | awk '{print $2}' || echo "unknown")
+          COUNTEREXAMPLE=$(grep -c 'Counterexample found' apalache_output.txt || echo "0")
+          echo "states=$STATES" >> $GITHUB_OUTPUT
+          echo "violations=$VIOLATIONS" >> $GITHUB_OUTPUT
+          echo "counterexample=$COUNTEREXAMPLE" >> $GITHUB_OUTPUT
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: tla-results
+          path: |
+            apalache_output.txt
+          retention-days: 30
+
+      - name: Commit results to evidence/tla_results/
+        if: always()
+        run: |
+          set -euo pipefail
+          mkdir -p evidence/tla_results
+          cat > evidence/tla_results/run_${{ github.run_id }}.json <<EOF
+          {
+            "run_id": "${{ github.run_id }}",
+            "sha": "${{ github.sha }}",
+            "timestamp": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+            "invariant": "NeverStale",
+            "max_steps": 30,
+            "states_explored": "${{ steps.extract.outputs.states }}",
+            "violations": "${{ steps.extract.outputs.violations }}",
+            "counterexample_found": ${{ steps.extract.outputs.counterexample }},
+            "raw_output": "apalache_output.txt"
+          }
+          EOF
+          cat evidence/tla_results/run_${{ github.run_id }}.json
+
+      - name: Summary
+        run: |
+          echo "## TLA+ Model Check Result" >> $GITHUB_STEP_SUMMARY
+          echo "- **Invariant**: NeverStale" >> $GITHUB_STEP_SUMMARY
+          echo "- **Max steps**: 30" >> $GITHUB_STEP_SUMMARY
+          echo "- **States explored**: ${{ steps.extract.outputs.states }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Violations**: ${{ steps.extract.outputs.violations }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Counterexample**: ${{ steps.extract.outputs.counterexample }}" >> $GITHUB_STEP_SUMMARY
+          if [ "${{ steps.extract.outputs.counterexample }}" -gt 0 ]; then
+            echo "- **Status**: ❌ INVARIANT VIOLATED (stale handle reachable)" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "- **Status**: ✅ PROVED (within bound)" >> $GITHUB_STEP_SUMMARY
+          fi
