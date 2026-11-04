@@ -21,7 +21,7 @@ jobs:
     # 仅在 fork 仓库运行，防止误触发上游
     if: github.repository_owner == 'XuJianrui'
     permissions:
-      contents: read
+      contents: write
       actions: read
     steps:
       - name: Checkout
@@ -70,11 +70,51 @@ jobs:
             bootstrap_output.txt
           retention-days: 30
 
-      - name: Summary
+      - name: Commit the small results (not the raw logs)
+        if: always()
         run: |
-          echo "## Bootstrap Statistics Result" >> $GITHUB_STEP_SUMMARY
-          if [ -f evidence/statistical/summary.json ]; then
-            cat evidence/statistical/summary.json | python3 -m json.tool >> $GITHUB_STEP_SUMMARY
+          set +e
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          # raw logs stay in the artifact; only the derived tables go in the repo
+          git add -f evidence/statistical/summary.json \
+                     evidence/statistical/readings_summary.csv \
+                     evidence/statistical/digest.md \
+                     evidence/statistical/raw_logs/manifest.json 2>/dev/null
+          git commit -m "evidence(stats): bootstrap summary from run ${{ github.run_id }}"
+          git pull --rebase --quiet
+          git push
+
+      - name: Summary
+        if: always()
+        run: |
+          echo "## Bootstrap statistics" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          if [ -f evidence/statistical/digest.md ]; then
+            cat evidence/statistical/digest.md >> "$GITHUB_STEP_SUMMARY"
           else
-            echo "No summary.json produced" >> $GITHUB_STEP_SUMMARY
+            echo "No digest.md produced." >> "$GITHUB_STEP_SUMMARY"
           fi
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          python3 - >> "$GITHUB_STEP_SUMMARY" <<'PY'
+          import json, pathlib
+          p = pathlib.Path("evidence/statistical/summary.json")
+          if not p.exists():
+              print("No summary.json produced.")
+          else:
+              d = json.loads(p.read_text())
+              m = d["metadata"]
+              print(f"logs `{m['log_files']}` · with readings `{m['logs_with_readings']}` "
+                    f"· per-job layer rows `{m['per_job_layer_rows']}` "
+                    f"· resamples `{m['bootstrap_resamples']}`")
+              print("")
+              print("| ratio | n | effect vs 1.0 | power | Holm p | Holm thr | significant |")
+              print("| :--- | :-- | :-- | :-- | :-- | :-- | :-- |")
+              for k, v in d["ratios"].items():
+                  h = d["multiple_comparison"].get(k, {})
+                  print(f"| {k} | {v['count']} | {v['effect_size_vs_1.0']:.3f} | "
+                        f"{(v['power_vs_1.0'] or 0):.2f} | {h.get('p_value', 0):.3g} | "
+                        f"{h.get('holm_threshold', 0):.3g} | {h.get('significant_after_holm')} |")
+              print("")
+              print(m["note"])
+          PY

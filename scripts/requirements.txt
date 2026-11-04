@@ -1,0 +1,4 @@
+# Dependencies for the evidence scripts in this directory.
+# Pinned loosely: these run only inside the evidence workflows, on ubuntu-latest.
+numpy>=1.26
+scipy>=1.11
