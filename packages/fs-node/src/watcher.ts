@@ -125,10 +125,12 @@ export class Watcher {
           } else if (stats) {
             isDirectoryMap.set(path, stats.isDirectory())
           }
-          const isDirectory = isDirectoryMap.get(path)
-          // decided by a later call with the stats
-          if (isDirectory === undefined) return false
-          return !keep(relative(root, path).split(sep).join('/'), isDirectory)
+          // Without the stats the type known before cannot be trusted: an entry
+          // that was a file may have been replaced by a link to a directory, and
+          // answering "ignored" here means chokidar never looks at it again. A
+          // "keep" is asked again with the new stats, which decide below.
+          if (!stats) return false
+          return !keep(relative(root, path).split(sep).join('/'), stats.isDirectory())
         },
       })
       watcher.on('error', error => this._error(error))
