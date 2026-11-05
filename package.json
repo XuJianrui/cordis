@@ -23,6 +23,7 @@
     "@cordisjs/unyaml": "^2.0.3",
     "@types/node": "^25.3.5",
     "@vitest/coverage-v8": "^4.1.5",
+    "chokidar6": "npm:chokidar@6.0.0",
     "esbuild": "^0.28.0",
     "eslint": "^8.57.1",
     "shx": "^0.4.0",
