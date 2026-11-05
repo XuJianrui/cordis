@@ -41,7 +41,7 @@
     "cordis": "^4.0.0-rc.12"
   },
   "dependencies": {
-    "chokidar": "^6.0.0",
+    "chokidar": "^4.0.3",
     "cosmokit": "^1.8.1",
     "picomatch": "^4.0.3"
   }
