@@ -1,5 +1,5 @@
 import { Context, Fiber } from 'cordis'
-import { mkdirSync, renameSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
+import { mkdirSync, renameSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs'
 import { basename, dirname, isAbsolute, relative, resolve } from 'node:path'
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import { FSWatcher } from 'chokidar'
@@ -315,6 +315,39 @@ describe('Fs', () => {
       symlinkSync(dirname(target), link, 'junction')
       await touch(target, () => seen.length)
       expect([...new Set(seen)]).to.deep.equal([resolve(link, 'file.ts')])
+    }, 15000)
+
+    it('reports a file, never the directory it became', async () => {
+      // `change` is documented as a file below the watched path being modified. When an
+      // entry is replaced by a directory, the library reports the entry itself, which is
+      // now a directory; passing that on tells a listener something it cannot act on.
+      const kept = write('became-dir/kept.txt')
+      const gone = write('became-dir/gone.txt')
+      const ctx = await setup()
+      const seen: string[] = []
+      const watcher = ctx.fs.watch(resolve(fixture, 'became-dir'))
+      // what matters is the state of the path when it is reported, not the order
+      watcher.on('change', (filename) => {
+        if (statSync(filename, { throwIfNoEntry: false })?.isDirectory()) seen.push(filename)
+      })
+      await new Promise<void>((r) => watcher.on('ready', () => r()))
+
+      // control first: an ordinary file change must get through
+      const heard: string[] = []
+      watcher.on('change', (filename) => { heard.push(filename) })
+      await touch(kept, () => heard.length)
+      expect(heard).to.include(kept)
+
+      // the entry becomes a directory, then a file inside it is written repeatedly. The
+      // writes are not waited on — what is being asserted is that nothing arrives, so
+      // waiting for an arrival would be waiting for the failure.
+      rmSync(gone)
+      mkdirSync(gone, { recursive: true })
+      for (let i = 0; i < 12; i++) {
+        writeFileSync(resolve(gone, 'inner.txt'), `v${i}`)
+        await new Promise(r => setTimeout(r, 100))
+      }
+      expect(seen).to.deep.equal([])
     }, 15000)
 
     it('keeps no entry with an empty `filter`', async () => {

@@ -1,7 +1,7 @@
 import { Context } from 'cordis'
 import { Awaitable } from 'cosmokit'
 import { watch } from 'chokidar'
-import { statSync } from 'node:fs'
+import { Stats, statSync } from 'node:fs'
 import { dirname, posix, relative, resolve, sep } from 'node:path'
 import picomatch from 'picomatch'
 
@@ -123,7 +123,27 @@ export class Watcher {
         },
       })
       watcher.on('error', error => this._error(error))
-      watcher.on('change', path => this._emit('change', resolve(path)))
+      // `change` reports a file below the watched path being modified. An event naming
+      // a directory is not that: a file replaced by a directory, or by a link to one,
+      // would otherwise reach a listener as a change to the directory itself, and a
+      // listener can do nothing with it. A regular file needs no check, so it costs
+      // nothing on the common path.
+      watcher.on('change', (path, stats) => {
+        path = resolve(path)
+        if (stats?.isDirectory()) return
+        if (stats?.isSymbolicLink()) {
+          // The link's own stats do not tell the type of its target, so it is read.
+          // It may be gone, and reading it may fail for reasons other than absence —
+          // a permission on Windows, for one. Neither is evidence that the link names
+          // a directory, so the event is passed on.
+          let target: Stats | undefined
+          try {
+            target = statSync(path, { throwIfNoEntry: false })
+          } catch {}
+          if (target?.isDirectory()) return
+        }
+        this._emit('change', path)
+      })
       await new Promise<void>(resolve => watcher.once('ready', () => resolve()))
       this._ready = true
       this._emit('ready')
