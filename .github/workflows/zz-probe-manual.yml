@@ -32,4 +32,4 @@ jobs:
       - name: library version
         run: node -e "console.log('chokidar@' + require('./node_modules/chokidar/package.json').version)"
       - name: readings
-        run: npx vitest run packages/fs-node/tests/zz-ci-surface.spec.ts
+        run: npx vitest run --config vitest.config.ts packages/fs-node/tests/zz-ci-surface.spec.ts
