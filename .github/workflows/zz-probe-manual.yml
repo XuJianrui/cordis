@@ -1,0 +1,35 @@
+name: Probe (manual)
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: branch or sha to read from
+        required: true
+        default: main
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  surface:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        node: [24, 26]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.ref }}
+      - uses: actions/setup-node@v6
+        with:
+          node-version: ${{ matrix.node }}
+      - run: npm install -g --force corepack@latest && corepack enable
+      - run: yarn install --no-immutable
+      - name: library version
+        run: node -e "console.log('chokidar@' + require('./node_modules/chokidar/package.json').version)"
+      - name: readings
+        run: yarn yakumo vitest fs-node
