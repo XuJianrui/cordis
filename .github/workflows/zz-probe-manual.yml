@@ -32,4 +32,4 @@ jobs:
       - name: library version
         run: node -e "console.log('chokidar@' + require('./node_modules/chokidar/package.json').version)"
       - name: readings
-        run: yarn yakumo vitest --import tsx --run packages/fs-node/tests/zz-ci-surface.spec.ts
+        run: yarn yakumo vitest fs-node
