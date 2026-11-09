@@ -128,7 +128,7 @@ export class Watcher {
       // the wait so a file written continuously still reports: the timer is never allowed to be
       // pushed further than twice the window from the first change it is holding.
       const WINDOW = 60
-      const pending = new Map<string, { timer: NodeJS.Timeout, first: number }>()
+      const pending = new Map<string, { timer: NodeJS.Timeout; first: number }>()
       watcher.on('change', (path) => {
         const filename = resolve(path)
         const entry = pending.get(filename)
