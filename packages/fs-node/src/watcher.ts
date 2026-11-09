@@ -123,11 +123,33 @@ export class Watcher {
         },
       })
       watcher.on('error', error => this._error(error))
-      watcher.on('change', path => this._emit('change', resolve(path)))
+      // chokidar throttles `change` to one per 50 ms per path, so a second real write inside that
+      // window never reaches a consumer. Hold the first change until the window has passed, but cap
+      // the wait so a file written continuously still reports: the timer is never allowed to be
+      // pushed further than twice the window from the first change it is holding.
+      const WINDOW = 60
+      const pending = new Map<string, { timer: NodeJS.Timeout, first: number }>()
+      watcher.on('change', (path) => {
+        const filename = resolve(path)
+        const entry = pending.get(filename)
+        const now = Date.now()
+        const first = entry?.first ?? now
+        if (entry) clearTimeout(entry.timer)
+        const wait = Math.max(0, Math.min(WINDOW, WINDOW * 2 - (now - first)))
+        const timer = setTimeout(() => {
+          pending.delete(filename)
+          this._emit('change', filename)
+        }, wait)
+        pending.set(filename, { timer, first })
+      })
       await new Promise<void>(resolve => watcher.once('ready', () => resolve()))
       this._ready = true
       this._emit('ready')
-      return () => watcher.close()
+      return async () => {
+        for (const { timer } of pending.values()) clearTimeout(timer)
+        pending.clear()
+        await watcher.close()
+      }
     }, 'ctx.fs.watch()')
   }
 
