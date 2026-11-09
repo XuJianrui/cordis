@@ -146,7 +146,12 @@ export class Watcher {
       this._ready = true
       this._emit('ready')
       return async () => {
-        for (const { timer } of pending.values()) clearTimeout(timer)
+        // Deliver what is still held, then stop. Dropping these would make disposal lose a change
+        // chokidar had already reported, which is the same class of bug this hook exists to fix.
+        for (const [filename, { timer }] of pending) {
+          clearTimeout(timer)
+          this._emit('change', filename)
+        }
         pending.clear()
         await watcher.close()
       }
