@@ -68,6 +68,9 @@ export interface ConfigIssue {
   location: SourceLocation
 }
 
+/** How long after a change to read once more, for a write the throttle never reported. */
+const CONFIRM = 60
+
 export class ConfigFileError extends Error {
   name = 'ConfigFileError'
 
@@ -293,7 +296,34 @@ export class Include extends EntryTree {
 
     if (config.watch) {
       ctx.inject(['fs'], (ctx) => {
-        ctx.fs.watch(this.filename).on('change', () => this.refresh())
+        let timer: NodeJS.Timeout | undefined
+        // a timer has no caller to return a rejection to, so the failure is logged here
+        const fire = () => {
+          timer = undefined
+          this.refresh().catch(error => this.ctx.logger.warn(error))
+        }
+        ctx.effect(() => () => clearTimeout(timer))
+        ctx.fs.watch(this.filename).on('change', () => {
+          // chokidar keeps one `change` per path per 50 ms, so a second write inside that window
+          // is never reported: the event is emitted for a state that does not persist -- the
+          // output commit problem, SS6.1 of the paper. Waiting the window out before reading
+          // costs a single write the window itself, so read at once and read once more after it:
+          // the first read is final when the event carried the last write, the second covers the
+          // write that the throttle swallowed. The second read is one `readFile` (490 us for a
+          // 60-byte file here), and `_read` returns early after it when the content has not
+          // moved, so nothing downstream runs for it.
+          //
+          // Measured against delaying the only read by the same window: this is faster at every
+          // gap tested (0/60/120 ms), and the extra read is the price. A confirm of 25 ms was
+          // measured too and misses bursts 30-45 ms apart, so the window is the throttle's own.
+          //
+          // The first read is returned rather than caught, so a failure takes the same path it
+          // took before this change: the emitter's `error` listeners, or a warning without one.
+          const read = this.refresh()
+          clearTimeout(timer)
+          timer = setTimeout(fire, CONFIRM)
+          return read
+        })
       })
     }
   }
