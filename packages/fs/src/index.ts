@@ -136,6 +136,7 @@ export class Fs extends Service {
   watch(path: string | URL, options: WatchOptions = {}): Watcher {
     const url = this.resolve(path)
     const mount = this._route(url)
+    const { provider } = mount
     return new Watcher(this.ctx, url, options, (watcher) => {
       this._connect(watcher, mount)
       return async () => {
@@ -143,7 +144,7 @@ export class Fs extends Service {
         this._watchers.delete(watcher)
         await connection?.dispose()
       }
-    })
+    }, provider.shape && ((url) => provider.shape!(url)))
   }
 }
 
@@ -154,6 +155,14 @@ export interface FsProvider {
    * scan is done, and reports nothing once the returned function is called.
    */
   watch?(watcher: Watcher): () => Awaitable<void>
+  /**
+   * The type `url` has now, or `undefined` when the provider cannot read it.
+   * `Watcher.shape` and `Watcher.stale` are answered from here, so a backend
+   * that is not Node needs no `node:fs`: a provider without this method gets a
+   * watch that reports `stale: false`, because it has nothing to compare
+   * against.
+   */
+  shape?(url: URL): 'file' | 'dir' | undefined
 }
 
 export interface BaseFs extends FsProvider {}
