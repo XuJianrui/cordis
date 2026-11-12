@@ -78,7 +78,7 @@ export class ConfigFileError extends Error {
   }
 }
 
-/** The file changed under us between the pre-check and the rename. */
+/** The file changed or disappeared between the pre-check and the rename. */
 class StaleWriteError extends Error {
   name = 'StaleWriteError'
 }
@@ -337,7 +337,8 @@ export class Include extends EntryTree {
 
   /**
    * Resolves once every pending read and write has been processed and the
-   * tree reflects the outcome. Unlike `refresh()`, this does wait for writes.
+   * tree reflects the outcome. `refresh()` returns this same promise, so both
+   * wait for writes; the difference is that `refresh()` sets `dirtyRead` first.
    */
   async flush() {
     while (this._draining || this._applyTask) {

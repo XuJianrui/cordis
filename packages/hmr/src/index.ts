@@ -279,9 +279,10 @@ class Hmr extends Service {
    * changed module that no component depends on is evicted too: its next import
    * gets the new code, while existing references keep the old one.
    *
-   * Every transaction first removes the module jobs that failed to load, link
-   * or evaluate, whether or not their files changed, so that the next import
-   * of their modules tries again.
+   * Every transaction removes the module jobs that failed to load, link or
+   * evaluate, whether or not their files changed, so that the next import of
+   * their modules tries again. This runs after the callback, so a job that
+   * failed during it is removed too.
    */
   reconcile(callback: () => Awaitable<Iterable<string>>): Promise<Hmr.Result> {
     const current = this._storage.getStore()
@@ -397,9 +398,10 @@ class Hmr extends Service {
   }
 
   /**
-   * Find every loaded module that exports a registered component, through its
-   * ESM namespace or the exports of its CJS module, so that a component that
-   * only `require()` has loaded is found too.
+   * Find the loaded modules that export a registered component, through the ESM
+   * namespace or the exports of the CJS module, so that a component that only
+   * `require()` has loaded is found too. Declined and built-in modules are
+   * skipped.
    */
   private _discover(declined: Set<string>) {
     const candidates = new Map<string, Component>()

@@ -13,7 +13,10 @@ export interface WatchOptions {
 export interface WatchEvents {
   /** A file at or below the watched location is modified. */
   change(url: URL): Awaitable<void>
-  /** The initial scan is done. A listener added afterwards is called at once. */
+  /**
+   * The initial scan is done. A listener added afterwards is called on the next
+   * microtask, not on the line that adds it.
+   */
   ready(): Awaitable<void>
   /** An error is logged as a warning without a listener. */
   error(error: unknown): Awaitable<void>
