@@ -1,5 +1,5 @@
 import { describe, expect, it, beforeAll } from 'vitest'
-import { Context } from 'cordis'
+import { Context, FiberState } from 'cordis'
 import MockLoader, { sleep } from './utils'
 
 // Entry initialization: imports performed while the first is in flight,
@@ -61,13 +61,33 @@ describe('Entry: initialization', () => {
 
   // `Entry.refresh()` returns early once the entry has an outer or an inner
   // fiber, so a refresh cannot restart an entry that is already running.
+  //
+  // Counted by how often the component runs, not by identity: `Fiber.restart()`
+  // calls `_refresh()` on the same fiber, so `entry.innerFiber` is the same object
+  // either way, and `state` is a numeric enum where only PENDING is falsy -- the two
+  // assertions that were here before passed whether or not the early return existed.
+  //
+  // The guard is enforced twice: `refresh()` returns on a live fiber, and `_init()`
+  // returns on `innerFiber?.uid`, so removing either one leaves this case green and
+  // only removing both makes it fail (`2` runs instead of `1`). What it pins is the
+  // property, not either line.
   it('refresh is a no-op once the entry has a fiber', async () => {
-    const entry = loader.store['1']
+    const applyCalls = loader.mock('noop', () => {})
+    await loader.create({ id: 'noop', name: 'noop' })
+    await loader.await()
+
+    const entry = loader.store['noop']
     const fiber = entry.innerFiber
     expect(fiber).to.be.ok
+    const runs = applyCalls.mock.calls.length
+    expect(runs, 'the component ran once when the entry was created').to.equal(1)
+
     await entry.refresh()
+    await loader.await()
+
+    expect(applyCalls.mock.calls.length, 'a refresh must not run the component again').to.equal(runs)
     expect(entry.innerFiber).to.equal(fiber)
-    expect(fiber.state).to.be.ok
+    expect(fiber.state).to.equal(FiberState.ACTIVE)
   })
 
   // A failed import clears `_initTask` in `init()`'s finally block, so the next
