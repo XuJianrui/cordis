@@ -178,8 +178,12 @@ describe('HMR', () => {
     })
 
     it('should keep a single nested entry when its host reloads too', async () => {
-      const stats = (globalThis as any).__hmrTest
       await waitFor(() => ctx.bail('hmr-test/get-nested') === 'tree-v1')
+      // Read after the wait, not before. `__hmrTest` is created when the fixture
+      // module is evaluated, and its `apply()` sets the value waited for above, so
+      // reaching this line means the object exists. Read first, and the assertions
+      // below get `undefined` on a machine where the configuration has not loaded.
+      const stats = (globalThis as any).__hmrTest
 
       // one change, two entries in the batch: the tree host and the entry
       // nested two fiber levels below it
@@ -195,8 +199,12 @@ describe('HMR', () => {
     }, 15000)
 
     it('should keep a single nested entry across a batch queued behind a stalled host', async () => {
-      const stats = (globalThis as any).__hmrTest
       await waitFor(() => ctx.bail('hmr-test/get-nested') === 'tree-v1')
+      // Read after the wait, not before. `__hmrTest` is created when the fixture
+      // module is evaluated, and its `apply()` sets the value waited for above, so
+      // reaching this line means the object exists. Read first, and the assertions
+      // below get `undefined` on a machine where the configuration has not loaded.
+      const stats = (globalThis as any).__hmrTest
 
       // batch 1: the host registers its subtree and then stalls inside init,
       // which defers its own unload and keeps the intermediate fiber active
