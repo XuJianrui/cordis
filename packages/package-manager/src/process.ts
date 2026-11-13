@@ -175,7 +175,8 @@ export function run(file: string, args: string[], options: RunOptions): Promise<
 
     child.on('error', (error) => {
       failure ??= error
-      // a process that could not be spawned emits no `close`
+      // a process that could not be spawned emits `error` and then `close`, so
+      // settling here is what makes the failure prompt rather than next-tick
       if (child.pid === undefined) {
         clearTimeout(timer)
         signal?.removeEventListener('abort', onAbort)
