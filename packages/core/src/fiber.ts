@@ -135,6 +135,11 @@ export class Fiber {
   private _activeChains = 0
   private _replayOwed = false
   private _replay: Promise<void> | undefined
+  /** Set for the duration of a replay, so a commit registered inside it queues. */
+  private _replaying = false
+  /** Commits waiting for the chains to go quiet, and the config each was registered for. */
+  private _pendingCommits: { key: any; commit: () => void }[] = []
+  private _resolvedConfig: any
   private _runner: EffectRunner<string>
   private _store: Dict<Impl> = Object.create(null)
   private _release: (() => void) | undefined
@@ -548,13 +553,27 @@ export class Fiber {
     if (!noSave) fiber.context.emit('internal/commit', fiber, config)
     fiber.config = config
     fiber._error = undefined
+    if (loaded) fiber._resolvedConfig = resolved
     const restart = () => fiber.restart()
-    const result = loaded
-      ? fiber.context.waterfall(fiber, 'internal/update', resolved, restart)
-      : restart()
-    // a listener may veto the restart, in which case there is nothing to await
-    if (result === undefined) return
+    // Counted before the handlers run, because they may register a commit from
+    // inside this call: with nothing counted, `whenStable` would take that for a
+    // settled fiber and fire at once, before the chain it belongs to has finished.
     fiber._activeChains++
+    let result: Awaitable<void>
+    try {
+      result = loaded
+        ? fiber.context.waterfall(fiber, 'internal/update', resolved, restart)
+        : restart()
+    } catch (error) {
+      fiber._activeChains--
+      throw error
+    }
+    // a listener may veto the restart, in which case there is nothing to await
+    if (result === undefined) {
+      fiber._activeChains--
+      fiber._flushCommits()
+      return
+    }
     const task = Promise.resolve(result).then(() => {
       return fiber._settleChains(revision)
     }, (error) => {
@@ -574,8 +593,53 @@ export class Fiber {
     if (this._updateRevision !== revision) this._replayOwed = true
     // a chain that settles later could overwrite the replay, so it waits for
     // the last one instead of running once per superseded caller
-    if (!this._replayOwed || this._activeChains > 0) return
-    return this._replayUpdate()
+    if (this._activeChains > 0) return
+    // A commit registered by a superseded handler describes a state the replay is
+    // still repairing, so the repair lands first.
+    if (this._replayOwed) return this._replayUpdate()
+    this._flushCommits()
+  }
+
+  /**
+   * The callback runs once every update task of this fiber has settled, and only
+   * while `config` is the latest one. It takes the config because a handler that
+   * resumes after a newer update cannot tell from the fiber which config it was
+   * invoked with.
+   */
+  whenStable(config: any, commit: () => void) {
+    // `uid` is cleared as soon as disposal starts, so a commit registered from a
+    // handler that resumes past it is dropped rather than fired
+    if (this.uid === null) return
+    // nothing is in flight, so the config this commit waits for is either the
+    // stored one already or one a newer update has replaced: it settles now,
+    // rather than waiting for an update that may never come
+    if (!this._activeChains && !this._replayOwed && !this._replaying) {
+      return this._commit({ key: config, commit })
+    }
+    // One entry per configuration. A handler re-run for the same stored config --
+    // by a replay, or by a second caller whose update it accepted -- registers the
+    // same intent again; the last registration carries the newest closure, and
+    // firing both would break the promise that a burst fires once.
+    const same = this._pendingCommits.findIndex((entry) => entry.key === config)
+    if (same >= 0) this._pendingCommits[same] = { key: config, commit }
+    else this._pendingCommits.push({ key: config, commit })
+  }
+
+  private _commit(entry: { key: any; commit: () => void }) {
+    if (this.uid === null || entry.key !== this._resolvedConfig) return
+    try {
+      entry.commit()
+    } catch (error) {
+      this.ctx.logger.error(error)
+    }
+  }
+
+  private _flushCommits() {
+    if (this._activeChains > 0 || this._replayOwed) return
+    const pending = this._pendingCommits
+    if (!pending.length) return
+    this._pendingCommits = []
+    for (const entry of pending) this._commit(entry)
   }
 
   private _replayUpdate(): Awaitable<void> {
@@ -585,22 +649,38 @@ export class Fiber {
     this._replayOwed = false
     // an unloaded fiber has no handler run left to correct: `update()` takes the
     // restart branch there too, and the pending activation reads the stored config
-    if (this._runner.epoch === INACTIVE) return
+    if (this._runner.epoch === INACTIVE) {
+      if (!this._activeChains) this._flushCommits()
+      return
+    }
     const revision = this._updateRevision
     const resolved = this._resolve(this.config)
+    // A replay re-enters the handler, so a commit it registers is a repeat of the
+    // one already queued. It waits for this repair to land instead of firing: the
+    // state it would report is the one being repaired.
+    this._replaying = true
     // the load already reflects the latest configuration, so the replay only
     // re-runs the handlers; it never requests another restart
     const result = this.context.waterfall(this, 'internal/update', resolved, () => {})
-    if (result === undefined) return
+    if (result === undefined) {
+      this._replaying = false
+      if (!this._activeChains) this._flushCommits()
+      return
+    }
     const task = Promise.resolve(result).then(() => {
       this._replay = undefined
+      this._replaying = false
       // an update that landed during the replay makes it stale too: settle it first
-      if (this._updateRevision === revision) return
+      if (this._updateRevision === revision) {
+        if (!this._activeChains) this._flushCommits()
+        return
+      }
       this._replayOwed = true
       if (this._activeChains > 0) return
       return this._replayUpdate()
     }, (error) => {
       this._replay = undefined
+      this._replaying = false
       throw error
     })
     // as in `update()`: the fiber reports the failure, and a caller that drops

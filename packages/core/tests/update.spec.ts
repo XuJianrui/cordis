@@ -654,4 +654,58 @@ describe('Fiber: concurrent updates', () => {
       await root.fiber.dispose()
     })
   })
+
+  describe('whenStable with a replay', () => {
+    async function harness() {
+      const root = new Context()
+      const started = Promise.withResolvers<void>()
+      const release = Promise.withResolvers<void>()
+      let applied = 0
+      const committed: number[] = []
+      const fiber = await root.plugin((ctx: Context) => {
+        ctx.on('internal/update', async (config: { value: number }, next: any) => {
+          if (config.value === 1) {
+            started.resolve()
+            await release.promise
+          }
+          applied = config.value
+          ctx.fiber.whenStable(config, () => committed.push(applied))
+          return next()
+        })
+      }, { value: 0 })
+      return { root, started, release, fiber, committed, get applied() { return applied } }
+    }
+
+    it('commits once, after the replay has repaired the state', async () => {
+      const h = await harness()
+      const first = Promise.resolve(h.fiber.update({ value: 1 }))
+      await h.started.promise
+      const second = Promise.resolve(h.fiber.update({ value: 2 }))
+      await second
+      h.release.resolve()
+      await first
+      await h.root.fiber.dispose()
+
+      // The replay re-enters the handler, so the same config is registered twice;
+      // one entry per config keeps that from becoming two commits. And the commit
+      // has to wait for the repair: registering it while the replay is still
+      // running would report the state the replay is about to correct.
+      expect(h.committed).to.deep.equal([2])
+      expect(h.applied).to.equal(2)
+    })
+
+    it('does not fire for a configuration the store has moved past', async () => {
+      const h = await harness()
+      const first = Promise.resolve(h.fiber.update({ value: 1 }))
+      await h.started.promise
+      const second = Promise.resolve(h.fiber.update({ value: 2 }))
+      await second
+      h.release.resolve()
+      await first
+      await h.root.fiber.dispose()
+
+      // `1` was superseded before its chain settled, so nothing waits for it
+      expect(h.committed).to.not.include(1)
+    })
+  })
 })
