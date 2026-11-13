@@ -162,17 +162,6 @@ class Hmr extends Service {
 
   constructor(ctx: Context, public config: Hmr.Config) {
     super(ctx, 'hmr')
-    // HMR patches internals whose shape is not in Node 20: `setup()` reads
-    // `internalBinding('modules')` and `package_json_reader`, both of which answer
-    // `undefined` there, and every invalidation then silently does nothing. Measured
-    // on 20.19.0 -- the loader itself is reachable and v1-classified, so a probe that
-    // only asked "is the loader there" would say yes. The floor belongs here, where
-    // it can say what it is, rather than inside the probe, where it could only answer
-    // `undefined` and be reported as "pass --expose-internals".
-    const [major] = process.versions.node.split('.').map(Number)
-    if (major < 22) {
-      throw new Error(`HMR needs Node.js 22 or later; this process is ${process.versions.node}`)
-    }
     const loader = ModuleLoader.fromInternal()
     if (!loader) {
       throw new Error('loader internals are unavailable, pass --expose-internals or install node-addon-require-builtin')

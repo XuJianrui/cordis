@@ -186,11 +186,17 @@ export class Http extends Service<Http.Intercept> {
     // `argv` predicts -- Node accepts `_` for `-` in every flag, so
     // `--expose_internals` opens the bundled copy while a check for the
     // hyphenated spelling says it does not.
+    //
+    // Both candidates stay inside the one `try`: `undici` is an optional peer, so a
+    // failure here must leave `Http.undici` unset as before, not escape the static
+    // block and fail the import.
     try {
       this.undici = require('internal/deps/undici/undici')
       setupInternalUndici(this.undici)
     } catch {
-      this.undici = require('undici')
+      try {
+        this.undici = require('undici')
+      } catch {}
     }
 
     for (const method of ['get', 'delete'] as const) {

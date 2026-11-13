@@ -159,6 +159,9 @@ export namespace ModuleLoader {
    */
   export function fromInternal(): ModuleLoader | undefined {
     if (_cachedLoader) return _cachedLoader
+    const [major] = process.versions.node.split('.').map(Number)
+    if (major < 22) return
+
     const raw = requireInternal('internal/modules/esm/loader')?.getOrInitializeCascadedLoader()
     if (!raw) return
     const version = typeof raw.getOrCreateModuleJob === 'function'
