@@ -33,8 +33,8 @@ function normalizePrefix(prefix: string | URL) {
 }
 
 /**
- * The file system service, which forwards each operation to the provider
- * mounted at its location.
+ * The file system service, which routes a watch to the provider mounted at
+ * its location.
  */
 export class Fs extends Service {
   private _mounts = new Map<string, Mount>()
