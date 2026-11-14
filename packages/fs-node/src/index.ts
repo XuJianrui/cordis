@@ -1,4 +1,5 @@
 import { BaseFs, Watcher } from '@cordisjs/fs'
+import { statSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { watchPath } from './watcher.ts'
@@ -22,6 +23,22 @@ function toPath(url: URL) {
 /** The local file system of Node.js. */
 class NodeFs extends BaseFs {
   static mount = 'file:'
+
+  /**
+   * The type the location has now, read with one `stat`. `throwIfNoEntry: false`
+   * only covers `ENOENT` and `ENOTDIR`; the rest still raise, so an unreadable
+   * location -- a symlink loop, a permission wall, a dropped mount -- answers
+   * `undefined` rather than taking the call down.
+   */
+  shape(url: URL): 'file' | 'dir' | undefined {
+    try {
+      const stats = statSync(fileURLToPath(url), { throwIfNoEntry: false })
+      if (!stats) return undefined
+      return stats.isDirectory() ? 'dir' : 'file'
+    } catch {
+      return undefined
+    }
+  }
 
   watch(watcher: Watcher) {
     return watchPath(watcher, toPath(watcher.url))
