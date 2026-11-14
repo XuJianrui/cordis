@@ -14,7 +14,8 @@ export class FileRef {
 
   /**
    * Returns a stream of the current content. A failure of the provider,
-   * including a missing file, errors the stream.
+   * including a missing file, errors the stream. A location with no provider,
+   * or one whose provider has no `read`, throws here instead.
    */
   stream(): ReadableStream<Uint8Array> {
     return this.fs['_provider'](this.url, 'read').read(this.url)
