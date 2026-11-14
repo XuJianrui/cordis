@@ -1,5 +1,6 @@
 import { AccessMode, BaseFs, FsError, Watcher } from '@cordisjs/fs'
 import { Context } from 'cordis'
+import { statSync } from 'node:fs'
 import { access, constants, FileHandle, lstat, open, rename, rmdir, unlink } from 'node:fs/promises'
 import { resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -118,6 +119,22 @@ class NodeFs extends BaseFs {
         await unlink(filename)
       }
     })
+  }
+
+  /**
+   * The type the location has now, read with one `stat`. `throwIfNoEntry: false`
+   * only covers `ENOENT` and `ENOTDIR`; the rest still raise, so an unreadable
+   * location -- a symlink loop, a permission wall, a dropped mount -- answers
+   * `undefined` rather than taking the call down.
+   */
+  shape(url: URL): 'file' | 'dir' | undefined {
+    try {
+      const stats = statSync(fileURLToPath(url), { throwIfNoEntry: false })
+      if (!stats) return undefined
+      return stats.isDirectory() ? 'dir' : 'file'
+    } catch {
+      return undefined
+    }
   }
 
   watch(watcher: Watcher) {
