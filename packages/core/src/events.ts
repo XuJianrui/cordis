@@ -1,6 +1,6 @@
 import { Awaitable, defineProperty, Promisify } from 'cosmokit'
 import { Context } from './context.ts'
-import { Fiber, FiberState, resolveConfig } from './fiber.ts'
+import { type Disposable, Fiber, FiberState, resolveConfig } from './fiber.ts'
 import { DisposableList, symbols } from './utils.ts'
 
 export function isBailed(value: any) {
@@ -15,7 +15,6 @@ export type DispatchMode = 'emit' | 'parallel' | 'serial' | 'bail' | 'waterfall'
 
 declare module './context.ts' {
   export interface Context {
-    /* eslint-disable max-len */
     parallel<K extends keyof Events>(name: K, ...args: Parameters<Events[K]>): Promise<void>
     parallel<K extends keyof Events>(thisArg: NoInfer<ThisType<Events[K]>>, name: K, ...args: Parameters<Events[K]>): Promise<void>
     emit<K extends keyof Events>(name: K, ...args: Parameters<Events[K]>): void
@@ -26,9 +25,8 @@ declare module './context.ts' {
     bail<K extends keyof Events>(thisArg: NoInfer<ThisType<Events[K]>>, name: K, ...args: Parameters<Events[K]>): ReturnType<Events[K]>
     waterfall<K extends keyof Events>(name: K, ...args: Parameters<Events[K]>): ReturnType<Events[K]>
     waterfall<K extends keyof Events>(thisArg: NoInfer<ThisType<Events[K]>>, name: K, ...args: Parameters<Events[K]>): ReturnType<Events[K]>
-    on<K extends keyof Events>(name: K, listener: Events[K], options?: boolean | EventOptions): () => boolean
-    once<K extends keyof Events>(name: K, listener: Events[K], options?: boolean | EventOptions): () => boolean
-    /* eslint-enable max-len */
+    on<K extends keyof Events>(name: K, listener: Events[K], options?: boolean | EventOptions): Disposable<void>
+    once<K extends keyof Events>(name: K, listener: Events[K], options?: boolean | EventOptions): Disposable<void>
   }
 }
 
@@ -162,7 +160,7 @@ export class EventsService {
     return dispatch()
   }
 
-  private register(label: string, name: string | symbol, callback: any, options: EventOptions): () => void {
+  private register(label: string, name: string | symbol, callback: any, options: EventOptions): Disposable<void> {
     const method = options.prepend ? 'unshift' : 'push'
     return this.ctx.fiber.effect(() => {
       const hooks = this._hooks[name] ??= []
@@ -219,6 +217,6 @@ export interface Events {
   'internal/config'(fiber: Fiber, next: () => any): any
   'internal/get'(ctx: Context, name: string, error: Error, next: () => any): any
   'internal/set'(ctx: Context, name: string, value: any, error: Error, next: () => boolean): boolean
-  'internal/listener'(this: Context, name: string, listener: any, prepend: boolean): void
+  'internal/listener'(this: Context, name: string, listener: any, options: EventOptions): void | Disposable<void>
   'internal/dispatch'(mode: DispatchMode, name: string | symbol, args: any[], thisArg: any): void
 }

@@ -1,5 +1,6 @@
 import { Context, Fiber, FiberState } from 'cordis'
 import Loader from '@cordisjs/loader'
+import Fs from '@cordisjs/fs'
 import { mkdirSync, rmSync, symlinkSync, unlinkSync, writeFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { dirname, resolve, sep } from 'node:path'
@@ -42,9 +43,9 @@ function fixture(name: string, content: string) {
 
 describe('Hmr.reconcile', () => {
   let ctx: Context
-  let fiber: Fiber<Context> | undefined
+  let fiber: Fiber | undefined
   // HMR is a sibling of the loader, and at most one instance is active at a time
-  let hmr: Fiber<Context> | undefined
+  let hmr: Fiber | undefined
 
   beforeAll(() => {
     rmSync(fixtureDir, { recursive: true, force: true })
@@ -62,10 +63,18 @@ describe('Hmr.reconcile', () => {
     fiber = undefined
   })
 
-  async function setup(baseUrl = import.meta.url) {
+  async function setup(baseUrl = new URL('.', import.meta.url).href) {
     ctx = new Context()
-    fiber = await ctx.use(Loader, { baseUrl })
+    await ctx.use(Fs, { baseUrl })
+    fiber = await ctx.use(Loader)
     hmr = await ctx.use(Hmr)
+    return ctx
+  }
+
+  // a context outside the one of `setup()`
+  async function standalone() {
+    const ctx = new Context()
+    await ctx.use(Fs)
     return ctx
   }
 
@@ -78,6 +87,7 @@ describe('Hmr.reconcile', () => {
 
   it('fails to start without loader internals', async () => {
     ctx = new Context()
+    await ctx.use(Fs)
     const spy = vi.spyOn(ModuleLoader, 'fromInternal').mockReturnValue(undefined)
     try {
       fiber = ctx.use(Hmr)
@@ -91,13 +101,13 @@ describe('Hmr.reconcile', () => {
 
   it('starts one instance at a time in a thread', async () => {
     await setup()
-    const second = new Context().use(Hmr)
+    const second = (await standalone()).use(Hmr)
     await second.await().catch(() => {})
     expect(second.state).to.equal(FiberState.FAILED)
 
     await hmr!.dispose()
     hmr = undefined
-    const third = new Context().use(Hmr)
+    const third = (await standalone()).use(Hmr)
     try {
       await third.await()
       expect(third.state).to.equal(FiberState.ACTIVE)

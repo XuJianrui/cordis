@@ -1,5 +1,7 @@
 import { Context, Fiber, Message } from 'cordis'
 import Loader from '@cordisjs/loader'
+import Fs from '@cordisjs/fs'
+import NodeFs from '@cordisjs/fs-node'
 import LoggerConsole from '@cordisjs/logger-console'
 import { expect, describe, it, afterEach } from 'vitest'
 import { readFile, rm, writeFile } from 'node:fs/promises'
@@ -29,7 +31,7 @@ interface Harness {
 
 describe('Include reload', () => {
   let ctx: Context | undefined
-  let fiber: Fiber<Context> | undefined
+  let fiber: Fiber | undefined
   let filename: string | undefined
 
   afterEach(async () => {
@@ -45,9 +47,9 @@ describe('Include reload', () => {
     await ctx.use(LoggerConsole)
     const messages: Message[] = []
     ctx.logger.exporter({ export: message => messages.push(message) })
-    fiber = await ctx.use(Loader, {
-      baseUrl: import.meta.url,
-    })
+    await ctx.use(Fs, { baseUrl: new URL('.', import.meta.url).href })
+    await ctx.use(NodeFs)
+    fiber = await ctx.use(Loader)
     const id = await ctx.loader.create({
       name: '@cordisjs/include',
       config: {

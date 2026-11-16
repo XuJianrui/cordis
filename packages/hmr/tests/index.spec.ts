@@ -1,9 +1,11 @@
 import { Context, Fiber, FiberState } from 'cordis'
 import Loader from '@cordisjs/loader'
+import Fs from '@cordisjs/fs'
+import NodeFs from '@cordisjs/fs-node'
 import Logger from '@cordisjs/logger-console'
 import { cpSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
-import { expect, describe, it, beforeAll, afterAll, afterEach, beforeEach } from 'vitest'
+import { expect, describe, it, beforeAll, afterAll, afterEach, beforeEach, vi } from 'vitest'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import Hmr from '../src/index.ts'
 import { ModuleLoader } from '../src/runtime/index.ts'
@@ -56,10 +58,12 @@ function waitFor(condFn: () => boolean | any, timeout = 8000, interval = 100): P
   })
 }
 
-async function createContext(group: string, configFile: string): Promise<{ ctx: Context; fiber: Fiber<Context> }> {
+async function createContext(group: string, configFile: string): Promise<{ ctx: Context; fiber: Fiber }> {
   const dir = copyFixtures(group)
   const ctx = new Context()
   await ctx.use(Logger)
+  await ctx.use(Fs)
+  await ctx.use(NodeFs)
   const fiber = await ctx.use(Loader)
   await ctx.loader.create({
     name: '@cordisjs/include',
@@ -158,7 +162,7 @@ describe('HMR', () => {
 
   describe('nested entry tree', () => {
     let ctx: Context
-    let fiber: Fiber<Context>
+    let fiber: Fiber
     const treeDep = fixture('nested', 'tree-dep.ts')
 
     beforeAll(async () => {
@@ -222,7 +226,7 @@ describe('HMR', () => {
 
   describe('resource handoff on reload', () => {
     let ctx: Context
-    let fiber: Fiber<Context>
+    let fiber: Fiber
     const drainDep = fixture('drain', 'drain-dep.ts')
 
     beforeAll(async () => {
@@ -273,7 +277,7 @@ describe('HMR', () => {
 
   describe('component with multiple entries', () => {
     let ctx: Context
-    let fiber: Fiber<Context>
+    let fiber: Fiber
     const componentMulti = fixture('multi', 'component-multi.ts')
 
     beforeAll(async () => {
@@ -415,15 +419,16 @@ describe('HMR', () => {
       let firstInstalled: Fiber | undefined
       let updating: Promise<void> | undefined
       let reenabled: Promise<void> | undefined
-      const stop = ctx.on('loader/patch-context', async (patched, next) => {
-        if (patched !== entry) return next()
+      const patch = entry._patchContext
+      const spy = vi.spyOn(entry, '_patchContext').mockImplementation(async (diff) => {
         if (++patches === 1) {
           await firstHold
         } else if (patches === 2) {
           await secondHold
         }
-        return next()
+        return patch.call(entry, diff)
       })
+      const stop = () => spy.mockRestore()
       try {
         await entry.update({ disabled: true })
         updating = entry.update({ disabled: false })

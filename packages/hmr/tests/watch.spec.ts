@@ -1,4 +1,4 @@
-import { Context, Fiber, Service } from 'cordis'
+import { Context, Fiber } from 'cordis'
 import Loader from '@cordisjs/loader'
 import Fs, { WatchOptions } from '@cordisjs/fs'
 import NodeFs from '@cordisjs/fs-node'
@@ -31,14 +31,10 @@ interface Watch {
 }
 
 // stands in for `@cordisjs/fs-node`, so that changes are reported by hand
-class FakeFs extends Service {
+class FakeFs extends Fs {
   static watches: Watch[] = []
 
-  constructor(ctx: Context) {
-    super(ctx, 'fs')
-  }
-
-  watch(url: URL, options?: WatchOptions) {
+  watch(url: URL, options?: WatchOptions): any {
     const watch: Watch = { path: fileURLToPath(url), options, listeners: [] }
     FakeFs.watches.push(watch)
     return {
@@ -59,9 +55,9 @@ function change(filename: string) {
 
 describe('Hmr with fs', () => {
   let ctx: Context
-  let fiber: Fiber<Context> | undefined
+  let fiber: Fiber | undefined
   // HMR is a sibling of the loader, and at most one instance is active at a time
-  let hmr: Fiber<Context> | undefined
+  let hmr: Fiber | undefined
   let reconcile: MockInstance<Hmr['reconcile']>
 
   beforeEach(() => {
@@ -86,12 +82,11 @@ describe('Hmr with fs', () => {
     reconcile.mockRestore()
   })
 
-  async function setup(config: Partial<Hmr.WatchConfig> = {}, base?: string, baseUrl = import.meta.url) {
+  async function setup(config: Partial<Hmr.WatchConfig> = {}, baseUrl = new URL('.', import.meta.url).href) {
     ctx = new Context()
-    ctx.baseUrl = baseUrl
+    await ctx.use(FakeFs, { baseUrl })
     fiber = await ctx.use(Loader)
-    await ctx.use(FakeFs)
-    hmr = await ctx.use(Hmr, { base, watch: { enabled: true, debounce: 50, ...config } })
+    hmr = await ctx.use(Hmr, { watch: { enabled: true, debounce: 50, ...config } } as Hmr.Config)
   }
 
   async function load(name: string, content: string) {
@@ -108,47 +103,39 @@ describe('Hmr with fs', () => {
   }
 
   // Only `baseDir` is asserted, so nothing is watched.
-  describe('base', () => {
-    async function create(base?: string, baseUrl: string | null = import.meta.url) {
+  describe('baseDir', () => {
+    async function create(baseUrl?: string, intercept?: string) {
       ctx = new Context()
-      ctx.baseUrl = baseUrl ?? undefined
-      fiber = await ctx.use(Hmr, { base })
+      await ctx.use(Fs, { baseUrl })
+      const scope = intercept === undefined ? ctx : ctx.intercept('fs', { baseUrl: intercept })
+      fiber = await scope.use(Hmr, {} as Hmr.Config)
       // a trailing separator does not matter
       return resolve(ctx.hmr.baseDir)
     }
 
-    // An absolute `base` is a legal configuration, but `new URL()` reads a Windows
-    // drive letter as a URL scheme (`c:`) and `fileURLToPath` rejects that scheme.
-    it.runIf(process.platform === 'win32')('accepts a drive-letter base', async () => {
-      expect(await create(testDir + sep)).to.equal(testDir)
+    it('is the directory of `ctx.fs.baseUrl`', async () => {
+      expect(await create(new URL('.', import.meta.url).href)).to.equal(testDir)
     })
 
-    it('resolves a relative base against the context', async () => {
-      expect(await create('..')).to.equal(dirname(testDir))
+    it('follows an `fs` intercept', async () => {
+      expect(await create(new URL('.', import.meta.url).href, '..')).to.equal(dirname(testDir))
     })
 
-    it('defaults to the context directory', async () => {
-      expect(await create()).to.equal(testDir)
+    it('defaults to the working directory', async () => {
+      expect(await create()).to.equal(process.cwd())
     })
 
-    it('defaults to the working directory without a context directory', async () => {
-      expect(await create(undefined, null)).to.equal(process.cwd())
-    })
-
-    const basePath = resolve(testDir, 'base with spaces # %')
-    it.each([
-      ['relative path', '../hmr base', resolve('../hmr base')],
-      ['absolute path', basePath, basePath],
-      ['file URL', pathToFileURL(basePath).href, basePath],
-    ])('accepts a %s without a context directory', async (_, base, expected) => {
-      expect(await create(base, null)).to.equal(expected)
+    it('decodes a file URL', async () => {
+      const basePath = resolve(testDir, 'base with spaces # %')
+      expect(await create(pathToFileURL(basePath).href)).to.equal(basePath)
     })
   })
 
-  it('watches `files` in `base`', async () => {
+  it('watches `files` in the directory of `ctx.fs.baseUrl`', async () => {
     const files = ['src', '!**/.*']
-    await setup({ files }, '__watch__')
-    expect(FakeFs.watches.map(({ path, options }) => [path, options?.filter])).to.deep.equal([[fixtureDir, files]])
+    await setup({ files }, new URL('__watch__/', import.meta.url).href)
+    // a trailing separator does not matter
+    expect(FakeFs.watches.map(({ path, options }) => [resolve(path), options?.filter])).to.deep.equal([[fixtureDir, files]])
   })
 
   it('does not watch with empty `files`', async () => {
@@ -249,7 +236,7 @@ export const apply = 'not a function'`))
   })
 
   it('retries an entry that a manifest has moved with the next batch', async () => {
-    await setup({}, undefined, pathToFileURL(fixtureDir + sep).href)
+    await setup({}, pathToFileURL(fixtureDir + sep).href)
     const dir = resolve(fixtureDir, 'node_modules/hmr-watch-entry')
     mkdirSync(dir, { recursive: true })
     const manifest = resolve(dir, 'package.json')
@@ -279,7 +266,7 @@ export const apply = 'not a function'`))
   })
 
   it('retries an importer of a package that a nearer package shadows with the next batch', async () => {
-    await setup({}, undefined, pathToFileURL(fixtureDir + sep).href)
+    await setup({}, pathToFileURL(fixtureDir + sep).href)
     const install = (dir: string, source: string) => {
       const path = resolve(fixtureDir, dir, 'node_modules/hmr-watch-dep')
       mkdirSync(path, { recursive: true })
@@ -334,9 +321,8 @@ export const apply = ctx => ctx.on('hmr-watch/shadow', () => value)
 
   it('reloads a component when its file changes on disk', async () => {
     ctx = new Context()
-    ctx.baseUrl = import.meta.url
+    await ctx.use(Fs, { baseUrl: new URL('.', import.meta.url).href })
     fiber = await ctx.use(Loader)
-    await ctx.use(Fs)
     await ctx.use(NodeFs)
     hmr = await ctx.use(Hmr, { watch: { enabled: true, files: ['__watch__'], debounce: 50 } })
     const path = await load('disk.ts', component('disk', 'v1'))

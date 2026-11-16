@@ -18,7 +18,7 @@ export class EntryGroup {
     return this.ctx
   }
 
-  async create(options: Omit<EntryOptions, 'id'>) {
+  async create(options: Omit<EntryOptions, 'id'> & { id?: string }) {
     const issues = validateOptions(options, EntryTree.sep)
     if (issues.length) throw this._reject(options as EntryOptions, issues)
     const id = this.tree.ensureId(options)
@@ -46,7 +46,6 @@ export class EntryGroup {
     if (entry) {
       delete this.tree.store[id]
       entry.dispose()
-      this.context.emit('loader/partial-dispose', entry, entry.options, false)
     }
     const frames = this.getOuterStack(id)
     if (!frames.length) return error
@@ -74,7 +73,6 @@ export class EntryGroup {
     if (!isDispose) {
       this.unlink(entry.options)
     }
-    this.context.emit('loader/partial-dispose', entry, entry.options, false)
   }
 
   async update(config: EntryOptions[]) {

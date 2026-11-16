@@ -1,5 +1,7 @@
 import { Context, Fiber, Message } from 'cordis'
 import Loader from '@cordisjs/loader'
+import Fs from '@cordisjs/fs'
+import NodeFs from '@cordisjs/fs-node'
 import { afterEach } from 'vitest'
 import { chmod, readFile, rm, writeFile } from 'node:fs/promises'
 import { fileURLToPath } from 'node:url'
@@ -27,7 +29,7 @@ export const group = (id: string, config: any[]) => ({
  * fixture file; everything it created is disposed and removed after each test.
  */
 export function harness() {
-  let fiber: Fiber<Context> | undefined
+  let fiber: Fiber | undefined
   const files: string[] = []
 
   afterEach(async () => {
@@ -47,7 +49,9 @@ export function harness() {
     const ctx = new Context()
     const messages: Message[] = []
     ctx.logger.exporter({ export: message => messages.push(message) })
-    fiber = await ctx.use(Loader, { baseUrl: import.meta.url })
+    await ctx.use(Fs, { baseUrl: new URL('.', import.meta.url).href })
+    await ctx.use(NodeFs)
+    fiber = await ctx.use(Loader)
     const id = await ctx.loader.create({
       name: '@cordisjs/include',
       config: { path: `./fixtures/${name}`, ...config },

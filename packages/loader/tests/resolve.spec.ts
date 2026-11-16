@@ -6,6 +6,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { Context } from 'cordis'
+import Fs from '@cordisjs/fs'
 import { Loader } from '../src/index.ts'
 import { createResolve } from '../src/resolve.ts'
 
@@ -36,7 +37,7 @@ async function fixture() {
   }))
   await writeFile(join(dep, 'index.js'), 'export const tag = "bare-dep"\n')
   await mkdir(join(root, 'src'))
-  return { root, baseUrl: pathToFileURL(join(root, 'src', 'cordis.yml')).href }
+  return { root, baseUrl: pathToFileURL(join(root, 'src')).href + '/' }
 }
 
 afterEach(async () => {
@@ -47,6 +48,7 @@ describe('bareImporter', () => {
   it('resolves bare specifiers against the project, not the loader', async () => {
     const { baseUrl } = await fixture()
     // The control: this package cannot see the fixture's dependency.
+    // @ts-expect-error: the dependency exists only in the fixture project
     await expect(import(/* @vite-ignore */ 'fixture-dep')).rejects.toThrow()
 
     const resolver = await createResolve(baseUrl)
@@ -174,11 +176,12 @@ describe('helper preparation', () => {
 })
 
 describe('EntryTree.import without internals', () => {
-  // Components are loaded through `entry.parent.tree`, which carries the tree's own
-  // base url; the `ctx.loader` accessor rebinds `ctx` to whoever reads it.
+  // Components are loaded through `entry.parent.tree`, whose context supplies the
+  // base URL; the `ctx.loader` accessor rebinds `ctx` to whoever reads it.
   async function treeFor(baseUrl: string) {
     const ctx = new Context()
-    await ctx.use(Loader, { baseUrl })
+    await ctx.use(Fs, { baseUrl })
+    await ctx.use(Loader)
     ctx.loader.internal = undefined
     return ctx.loader.root.tree
   }

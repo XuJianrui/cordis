@@ -297,6 +297,29 @@ describe('ctx.timer', () => {
       assert.strictEqual(callback.mock.calls.length, 2)
     }))
 
+    it('uses elapsed time when the wall clock moves backwards', withContext(async (ctx) => {
+      const callback = mock.fn()
+      const throttled = ctx.throttle(callback, 1000)
+      throttled()
+      await vi.advanceTimersByTimeAsync(400)
+      vi.setSystemTime(new Date('2026-01-01T00:00:00Z'))
+      throttled()
+      await vi.advanceTimersByTimeAsync(600)
+      assert.strictEqual(callback.mock.calls.length, 2)
+    }, { now: new Date('2026-01-01T01:00:00Z') }))
+
+    it('does not release the throttle early when the wall clock moves forwards', withContext(async (ctx) => {
+      const callback = mock.fn()
+      const throttled = ctx.throttle(callback, 1000)
+      throttled()
+      await vi.advanceTimersByTimeAsync(400)
+      vi.setSystemTime(new Date('2026-01-01T01:00:00Z'))
+      throttled()
+      assert.strictEqual(callback.mock.calls.length, 1)
+      await vi.advanceTimersByTimeAsync(600)
+      assert.strictEqual(callback.mock.calls.length, 2)
+    }, { now: new Date('2026-01-01T00:00:00Z') }))
+
     it('context dispose', withContext(async (ctx) => {
       const callback = mock.fn()
       let throttled!: () => void
@@ -338,6 +361,25 @@ describe('ctx.timer', () => {
       await vi.advanceTimersByTimeAsync(2000)
       throttled()
       assert.strictEqual(callback.mock.calls.length, 0)
+    }))
+
+    it('context dispose with re-entrant callback', withContext(async (ctx) => {
+      const callback = mock.fn()
+      let throttled!: () => void
+      const fiber = await ctx.use({
+        inject: ['timer'],
+        apply: (ctx) => {
+          throttled = ctx.throttle(() => {
+            callback()
+            throttled()
+          }, 1000)
+        },
+      })
+      throttled()
+      assert.strictEqual(callback.mock.calls.length, 1)
+      await fiber.dispose()
+      await vi.advanceTimersByTimeAsync(2000)
+      assert.strictEqual(callback.mock.calls.length, 1)
     }))
   })
 

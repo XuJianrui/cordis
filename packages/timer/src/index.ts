@@ -115,7 +115,10 @@ export class TimerService extends Service {
     const wrapper: any = (...args: any[]) => {
       if (isDisposed) return
       clearTimeout(timer)
-      timer = trigger(args)
+      timer = undefined
+      const next = trigger(args)
+      // A re-entering callback may schedule a trailing call before `trigger` returns; keep its handle.
+      if (next !== undefined) timer = next
     }
     wrapper.dispose = dispose
     return wrapper
@@ -124,11 +127,11 @@ export class TimerService extends Service {
   throttle<F extends (...args: any[]) => any>(callback: F, delay: number, noTrailing?: boolean): Scheduled<F> {
     let lastCall = -Infinity
     const execute = (...args: any[]) => {
-      lastCall = Date.now()
+      lastCall = performance.now()
       callback(...args)
     }
     return this._schedule('ctx.throttle()', (args) => {
-      const now = Date.now()
+      const now = performance.now()
       const remaining = delay - now + lastCall
       if (remaining <= 0) {
         execute(...args)

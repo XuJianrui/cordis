@@ -27,13 +27,16 @@
     "component"
   ],
   "devDependencies": {
+    "@cordisjs/fs": "^2.0.0-rc.0",
     "cordis": "^4.0.0-rc.13"
   },
   "peerDependencies": {
+    "@cordisjs/fs": "^2.0.0-rc.0",
     "cordis": "^4.0.0-rc.13"
   },
   "dependencies": {
     "dotenv": "^17.4.2",
-    "dotenv-expand": "^12.0.3"
+    "dotenv-expand": "^13.0.0",
+    "schemastery": "^3.18.0"
   }
 }

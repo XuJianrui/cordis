@@ -4,6 +4,7 @@ import { readFile, writeFile } from 'node:fs/promises'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import z from 'schemastery'
+import type {} from '@cordisjs/fs'
 import { AgentInfo, detectAgent } from './agent.ts'
 import { applyChanges, DependencyChanges, normalizeChanges, stringifyManifest } from './manifest.ts'
 import { createEnv, run } from './process.ts'
@@ -22,7 +23,9 @@ declare module 'cordis' {
 }
 
 class PackageManager extends Service {
-  /** the real path of the nearest directory with a `package.json` from `base` */
+  static inject = ['fs']
+
+  /** the real path of the nearest directory with a `package.json` from `ctx.fs.baseUrl` */
   public root!: string
 
   private _queue: Promise<unknown> = Promise.resolve()
@@ -32,9 +35,7 @@ class PackageManager extends Service {
   }
 
   async* [Service.init]() {
-    const { base } = this.config
-    const dir = this.ctx.baseUrl ? fileURLToPath(new URL('.', this.ctx.baseUrl)) : resolve('.')
-    const start = base ? resolve(dir, base) : dir
+    const start = fileURLToPath(this.ctx.fs.baseUrl)
     let root = await realpath(start)
     while (!existsSync(join(root, 'package.json'))) {
       const parent = dirname(root)
@@ -96,12 +97,10 @@ class PackageManager extends Service {
 
 namespace PackageManager {
   export interface Config {
-    base?: string
     timeout: number
   }
 
   export const Config: z<Config> = z.object({
-    base: z.string().description('The directory to look for the project from. Defaults to `ctx.baseUrl`.'),
     timeout: z.natural().role('ms').default(600000).description('Terminate the agent after it produces no output for this long, in milliseconds.'),
   })
 

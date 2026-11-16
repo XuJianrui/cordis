@@ -54,7 +54,7 @@ async function watch(ctx: Context, path: string | URL, listener: (filename: stri
 }
 
 describe('Fs', () => {
-  let fiber: Fiber<Context> | undefined
+  let fiber: Fiber | undefined
 
   beforeAll(() => {
     rmSync(fixture, { recursive: true, force: true })
@@ -73,8 +73,7 @@ describe('Fs', () => {
 
   async function setup() {
     const root = new Context()
-    root.baseUrl = import.meta.url
-    fiber = await root.use(Fs)
+    fiber = await root.use(Fs, { baseUrl: new URL('.', import.meta.url).href })
     await root.use(NodeFs)
     let ctx!: Context
     await root.inject(['fs'], (inner) => { ctx = inner })
